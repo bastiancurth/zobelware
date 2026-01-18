@@ -354,10 +354,10 @@ const CharacterManager = {
             boss: { key: 'SwaggyBoss', name: 'SWAGGY BOSS!' }
         },
         dude: {
-            name: 'Dude',
+            name: 'Trashi',
             color: 0x4169E1,  // Blau
             image: 'dude',
-            scale: 3.0,  // Dude ist kleines Pixel-Art, muss vergrößert werden
+            scale: 3.0,  // Trashi ist kleines Pixel-Art, muss vergrößert werden
             frameWidth: 32,  // Spritesheet frame width
             jingleNotes: [261.63, 329.63, 392, 523.25, 392, 329.63],
             games: [
@@ -750,13 +750,14 @@ class ZobelJump extends BaseMicrogame {
         this.add.rectangle(400, 530, 800, 60, 0x8b4513);
         this.add.rectangle(400, 505, 800, 10, 0x228b22); // Gras
 
-        // Spieler (unsichtbares Physik-Objekt)
-        this.playerY = 450;
+        // Spieler - auf dem Boden stehend (Gras bei y=500)
+        this.groundY = 480;
+        this.playerY = this.groundY;
         this.velocityY = 0;
         this.isOnGround = true;
         this.gravity = 1500;
 
-        // Zobel zeichnen
+        // Zobel zeichnen - auf Bodenhöhe
         if (this.textures.exists('zobel')) {
             this.zobel = this.add.image(150, this.playerY, 'zobel').setScale(0.18);
         } else {
@@ -811,8 +812,8 @@ class ZobelJump extends BaseMicrogame {
         this.playerY += this.velocityY * dt;
 
         // Boden-Check
-        if (this.playerY >= 450) {
-            this.playerY = 450;
+        if (this.playerY >= this.groundY) {
+            this.playerY = this.groundY;
             this.velocityY = 0;
             this.isOnGround = true;
         }
@@ -1312,15 +1313,16 @@ class SwaggyBubble extends BaseMicrogame {
         this.popped = 0;
         this.target = 5;
 
-        this.add.text(400, 30, 'Platze 5 Blasen! SPACE', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(400, 30, 'Platze 5 Blasen! Klick zur Maus!', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
         this.collectText = this.add.text(400, 60, '0 / 5', { font: 'bold 24px Orbitron', fill: '#87CEEB' }).setOrigin(0.5);
 
-        // Swaggy
-        this.swaggyY = 500;
+        // Swaggy in der Mitte
+        this.swaggyX = 400;
+        this.swaggyY = 300;
         if (this.textures.exists('swaggy')) {
-            this.swaggy = this.add.image(400, this.swaggyY, 'swaggy').setScale(0.1);
+            this.swaggy = this.add.image(this.swaggyX, this.swaggyY, 'swaggy').setScale(0.1);
         } else {
-            this.swaggy = this.add.container(400, this.swaggyY);
+            this.swaggy = this.add.container(this.swaggyX, this.swaggyY);
             const fish = this.add.graphics();
             fish.fillStyle(0xFFA500, 1);
             fish.fillEllipse(0, 0, 50, 25);
@@ -1329,16 +1331,19 @@ class SwaggyBubble extends BaseMicrogame {
             this.swaggy.add(fish);
         }
 
+        // Ziel-Linie zur Maus
+        this.aimLine = this.add.graphics();
+
         // Blasen
         this.bubbles = [];
         for (let i = 0; i < 8; i++) {
             this.spawnBubble();
         }
 
-        // Space zum Blasen platzen
-        this.input.keyboard.on('keydown-SPACE', () => {
+        // Klick zum Schießen Richtung Maus
+        this.input.on('pointerdown', (pointer) => {
             if (this.hasEnded) return;
-            this.shootBubble();
+            this.shootBubble(pointer.x, pointer.y);
         });
 
         this.startTimer();
@@ -1346,22 +1351,48 @@ class SwaggyBubble extends BaseMicrogame {
 
     spawnBubble() {
         const bubble = this.add.circle(
-            Phaser.Math.Between(100, 700),
-            Phaser.Math.Between(100, 400),
+            Phaser.Math.Between(80, 720),
+            Phaser.Math.Between(80, 520),
             Phaser.Math.Between(20, 40),
             0x87CEEB, 0.7
         );
+        // Nicht zu nah an Swaggy spawnen
+        if (Phaser.Math.Distance.Between(bubble.x, bubble.y, this.swaggyX, this.swaggyY) < 100) {
+            bubble.x = Phaser.Math.Between(50, 150);
+        }
         bubble.active = true;
         this.bubbles.push(bubble);
     }
 
-    shootBubble() {
-        // Swaggy schießt Blase nach oben
-        const projectile = this.add.circle(400, this.swaggyY - 30, 10, 0xFFD700);
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        // Ziel-Linie zur Maus zeichnen
+        const pointer = this.input.activePointer;
+        this.aimLine.clear();
+        this.aimLine.lineStyle(2, 0xFFD700, 0.5);
+        this.aimLine.lineBetween(this.swaggyX, this.swaggyY, pointer.x, pointer.y);
+    }
+
+    shootBubble(targetX, targetY) {
+        // Richtung berechnen
+        const angle = Phaser.Math.Angle.Between(this.swaggyX, this.swaggyY, targetX, targetY);
+        const speed = 600;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+
+        // Projektil erstellen
+        const projectile = this.add.circle(this.swaggyX, this.swaggyY, 10, 0xFFD700);
+        projectile.vx = vx;
+        projectile.vy = vy;
+
+        // Projektil bewegen per Tween
         this.tweens.add({
             targets: projectile,
-            y: 0,
-            duration: 500,
+            x: this.swaggyX + vx,
+            y: this.swaggyY + vy,
+            duration: 800,
             onUpdate: () => {
                 this.bubbles.forEach(bubble => {
                     if (bubble.active && Phaser.Math.Distance.Between(projectile.x, projectile.y, bubble.x, bubble.y) < bubble.radius + 10) {
@@ -1554,30 +1585,30 @@ class DudeRun extends BaseMicrogame {
 
         // Boden
         this.add.rectangle(400, 550, 800, 100, 0x654321);
-        this.add.rectangle(400, 580, 800, 40, 0x228B22);
+        this.add.rectangle(400, 510, 800, 20, 0x228B22); // Gras höher
 
         this.add.text(400, 30, 'Laufe nach rechts! →', { font: '18px Orbitron', fill: '#000' }).setOrigin(0.5);
         this.distanceText = this.add.text(400, 60, '0m', { font: 'bold 24px Orbitron', fill: '#4169E1' }).setOrigin(0.5);
 
-        // Dude
+        // Trashi - höher positioniert
+        this.groundY = 430;
         this.dudeX = 100;
         if (this.textures.exists('dude')) {
-            this.dude = this.add.sprite(this.dudeX, 480, 'dude', 4).setScale(3.0);
+            this.dude = this.add.sprite(this.dudeX, this.groundY, 'dude', 4).setScale(3.0);
         } else {
-            this.dude = this.add.rectangle(this.dudeX, 480, 30, 50, 0x4169E1);
+            this.dude = this.add.rectangle(this.dudeX, this.groundY, 30, 50, 0x4169E1);
         }
 
-        // Hindernisse
+        // Hindernisse - auch höher
         this.obstacles = [];
         for (let i = 0; i < 3; i++) {
-            const obs = this.add.rectangle(300 + i * 200, 480, 30, 60, 0x8B0000);
+            const obs = this.add.rectangle(300 + i * 200, this.groundY + 10, 30, 60, 0x8B0000);
             this.obstacles.push(obs);
         }
 
         this.cursors = this.input.keyboard.createCursorKeys();
         this.isJumping = false;
         this.dudeVY = 0;
-        this.groundY = 480;
 
         this.input.keyboard.on('keydown-SPACE', () => {
             if (!this.isJumping && !this.hasEnded) {
@@ -1643,18 +1674,19 @@ class DudeDodge extends BaseMicrogame {
         this.add.rectangle(400, 550, 800, 100, 0x333333);
         this.add.text(400, 30, 'Weiche den Bomben aus! ← →', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
-        // Dude
+        // Trashi - höher positioniert
         this.dudeX = 400;
+        this.dudeY = 430;
         if (this.textures.exists('dude')) {
-            this.dude = this.add.sprite(this.dudeX, 480, 'dude', 4).setScale(3.0);
+            this.dude = this.add.sprite(this.dudeX, this.dudeY, 'dude', 4).setScale(3.0);
         } else {
-            this.dude = this.add.rectangle(this.dudeX, 480, 30, 50, 0x4169E1);
+            this.dude = this.add.rectangle(this.dudeX, this.dudeY, 30, 50, 0x4169E1);
         }
 
         // Bomben
         this.bombs = [];
         this.spawnTimer = this.time.addEvent({
-            delay: 400,
+            delay: 500,
             callback: () => {
                 if (!this.hasEnded) {
                     const bomb = this.add.circle(Phaser.Math.Between(50, 750), -20, 15, 0xff0000);
@@ -1670,6 +1702,7 @@ class DudeDodge extends BaseMicrogame {
     }
 
     update() {
+        super.update();  // Timer-Update
         if (this.hasEnded) return;
 
         const speed = 7;
@@ -1686,16 +1719,26 @@ class DudeDodge extends BaseMicrogame {
         this.dudeX = Phaser.Math.Clamp(this.dudeX, 30, 770);
         this.dude.x = this.dudeX;
 
-        // Bomben bewegen
-        this.bombs.forEach(bomb => {
+        // Bomben bewegen und aufräumen
+        for (let i = this.bombs.length - 1; i >= 0; i--) {
+            const bomb = this.bombs[i];
             bomb.y += bomb.vy;
-            if (bomb.y > 600) bomb.destroy();
 
-            // Kollision
-            if (Phaser.Math.Distance.Between(this.dudeX, 480, bomb.x, bomb.y) < 35) {
+            // Bombe aus dem Bildschirm? Entfernen
+            if (bomb.y > 600) {
+                bomb.destroy();
+                this.bombs.splice(i, 1);
+                continue;
+            }
+
+            // Kollision - kleinere Hitbox (nur wenn Bombe wirklich den Spieler trifft)
+            const dudeWidth = 20;
+            const dudeHeight = 60;
+            if (bomb.x > this.dudeX - dudeWidth && bomb.x < this.dudeX + dudeWidth &&
+                bomb.y > this.dudeY - dudeHeight/2 && bomb.y < this.dudeY + dudeHeight/2) {
                 this.lose();
             }
-        });
+        }
     }
 }
 
@@ -1709,23 +1752,24 @@ class DudeJump extends BaseMicrogame {
         this.target = 1;
 
         this.add.rectangle(400, 550, 800, 100, 0x2d3436);
+        this.add.rectangle(400, 510, 800, 20, 0x228B22); // Gras
         this.add.text(400, 30, 'Spring über das Hindernis! SPACE', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
-        // Dude
-        this.dudeY = 480;
+        // Trashi - höher positioniert
+        this.groundY = 430;
+        this.dudeY = this.groundY;
         if (this.textures.exists('dude')) {
             this.dude = this.add.sprite(200, this.dudeY, 'dude', 4).setScale(3.0);
         } else {
             this.dude = this.add.rectangle(200, this.dudeY, 30, 50, 0x4169E1);
         }
 
-        // Hindernis kommt von rechts
-        this.obstacle = this.add.rectangle(850, 480, 40, 50, 0xff6b6b);
+        // Hindernis kommt von rechts - auch höher
+        this.obstacle = this.add.rectangle(850, this.groundY + 10, 40, 50, 0xff6b6b);
         this.obstacleSpeed = 6;
 
         this.isJumping = false;
         this.dudeVY = 0;
-        this.groundY = 480;
 
         this.input.keyboard.on('keydown-SPACE', () => {
             if (!this.isJumping && !this.hasEnded) {
@@ -1738,7 +1782,13 @@ class DudeJump extends BaseMicrogame {
     }
 
     update() {
+        super.update();  // Timer-Update
         if (this.hasEnded) return;
+
+        // Rennanimation wenn nicht springend
+        if (!this.isJumping && this.dude.play) {
+            this.dude.play('dude_right', true);
+        }
 
         // Springen
         if (this.isJumping) {
@@ -1759,15 +1809,15 @@ class DudeJump extends BaseMicrogame {
 
         // Erfolgreich übersprungen
         if (this.obstacle.x < 150 && this.jumped === 0) {
-            if (this.dudeY < 440) {
+            if (this.dudeY < this.groundY - 40) {
                 // In der Luft = übersprungen
                 this.jumped++;
                 this.win();
             }
         }
 
-        // Kollision
-        if (this.obstacle.x > 160 && this.obstacle.x < 240 && this.dudeY > 450) {
+        // Kollision - angepasste Werte
+        if (this.obstacle.x > 160 && this.obstacle.x < 240 && this.dudeY > this.groundY - 30) {
             this.lose();
         }
 
@@ -2306,16 +2356,16 @@ class StartScreen extends Phaser.Scene {
 
         // Alle 3 Charaktere anzeigen
         const characters = [
-            { key: 'zobel', x: 200, scale: 0.2, name: 'Zobel' },
-            { key: 'swaggy', x: 400, scale: 0.1, name: 'Swaggy' },
-            { key: 'dude', x: 600, scale: 3.0, name: 'Dude' }
+            { key: 'zobel', x: 200, scale: 0.2, name: 'Zobel', y: 260 },
+            { key: 'swaggy', x: 400, scale: 0.1, name: 'Swaggy', y: 260 },
+            { key: 'dude', x: 600, scale: 3.0, name: 'Trashi', y: 220 }
         ];
 
         characters.forEach((char, idx) => {
             let sprite;
             if (char.key === 'dude' && this.textures.exists('dude')) {
-                sprite = this.add.sprite(char.x, 260, 'dude', 4).setScale(char.scale);
-                // Dude idle animation
+                sprite = this.add.sprite(char.x, char.y, 'dude', 4).setScale(char.scale);
+                // Trashi idle animation
                 this.time.addEvent({
                     delay: 500 + idx * 200,
                     callback: () => {
@@ -2335,16 +2385,16 @@ class StartScreen extends Phaser.Scene {
                     loop: false
                 });
             } else if (this.textures.exists(char.key)) {
-                sprite = this.add.image(char.x, 260, char.key).setScale(char.scale);
+                sprite = this.add.image(char.x, char.y, char.key).setScale(char.scale);
             } else {
                 // Fallback auf gezeichnetes Zobel
-                sprite = Zobel.draw(this, char.x, 260, 0.7);
+                sprite = Zobel.draw(this, char.x, char.y, 0.7);
             }
 
             // Schwebeeffekt
             this.tweens.add({
                 targets: sprite,
-                y: 250,
+                y: char.y - 10,
                 duration: 1200 + idx * 200,
                 yoyo: true,
                 repeat: -1,
@@ -2415,9 +2465,9 @@ class AlbumScene extends Phaser.Scene {
             // Swaggy Spiele
             { key: 'SwaggySwim', name: 'Swaggy Swim', color: 0xFFA500 }, { key: 'SwaggyBubble', name: 'Swaggy Bubble', color: 0xFFA500 },
             { key: 'SwaggyDance', name: 'Swaggy Dance', color: 0xFFA500 }, { key: 'SwaggyFish', name: 'Swaggy Fish', color: 0xFFA500 },
-            // Dude Spiele
-            { key: 'DudeRun', name: 'Dude Run', color: 0x4169E1 }, { key: 'DudeDodge', name: 'Dude Dodge', color: 0x4169E1 },
-            { key: 'DudeJump', name: 'Dude Jump', color: 0x4169E1 }
+            // Trashi Spiele
+            { key: 'DudeRun', name: 'Trashi Run', color: 0x4169E1 }, { key: 'DudeDodge', name: 'Trashi Dodge', color: 0x4169E1 },
+            { key: 'DudeJump', name: 'Trashi Jump', color: 0x4169E1 }
         ];
         this.allGames = games; this.currentPage = 0; this.itemsPerPage = 12; this.totalPages = Math.ceil(games.length / this.itemsPerPage);
         this.cardsContainer = this.add.container(0, 0);
