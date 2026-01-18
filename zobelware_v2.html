@@ -1,0 +1,3068 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>ZobelWare 2.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 50%, #0a1a2e 100%); font-family: 'Orbitron', sans-serif; overflow: hidden; }
+        body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15), rgba(0,0,0,0.15) 1px, transparent 1px, transparent 2px); pointer-events: none; z-index: 1000; }
+        canvas { border: 6px solid #00ff88; border-radius: 8px; box-shadow: 0 0 30px rgba(0,255,136,0.5), 0 0 60px rgba(0,255,136,0.3); background: #0a0a1a; }
+    </style>
+</head>
+<body>
+<script>
+// MUSIK-SYSTEM
+class MusicEngine {
+    constructor() {
+        this.audioContext = null; this.masterGain = null; this.musicGain = null;
+        this.isPlaying = false; this.currentBPM = 140; this.musicEnabled = true;
+        this.sfxEnabled = true; this.timerID = null; this.initialized = false;
+        this.nextNoteTime = 0; this.currentBeat = 0;
+        this.currentMusicStyle = 'main';
+        this.noteFreq = {'C2':65.41,'D2':73.42,'E2':82.41,'F2':87.31,'G2':98,'A2':110,'B2':123.47,'C3':130.81,'D3':146.83,'E3':164.81,'F3':174.61,'G3':196,'A3':220,'B3':246.94,'C4':261.63,'D4':293.66,'E4':329.63,'F4':349.23,'G4':392,'A4':440,'B4':493.88,'C5':523.25,'D5':587.33,'E5':659.25,'F5':698.46,'G5':783.99,'A5':880,'B5':987.77,'C6':1046.5,'D6':1174.66,'E6':1318.51};
+        // Verschiedene Musik-Styles für Microgames
+        this.musicStyles = {
+            main: { melody: ['C5','E5','G5','C6','B5','G5','E5','C5'], bass: ['C3','G3','C3','G3'], tempo: 1.0, type: 'square' },
+            action: { melody: ['E5','E5','E5','C5','E5','G5','G4'], bass: ['C3','C3','G2','G2'], tempo: 1.2, type: 'square' },
+            puzzle: { melody: ['G4','A4','B4','C5','D5','E5','D5','C5'], bass: ['C3','E3','G3','E3'], tempo: 0.8, type: 'sine' },
+            tense: { melody: ['E4','E4','F4','G4','G4','F4','E4','D4'], bass: ['A2','A2','A2','E2'], tempo: 1.0, type: 'sawtooth' },
+            happy: { melody: ['C5','D5','E5','G5','E5','D5','C5','G4'], bass: ['C3','G3','E3','G3'], tempo: 1.1, type: 'square' },
+            rush: { melody: ['C5','C5','G5','G5','A5','A5','G5'], bass: ['C3','C3','F3','G3'], tempo: 1.4, type: 'square' },
+            calm: { melody: ['E4','G4','B4','E5','D5','B4','G4','E4'], bass: ['E3','B2','E3','B2'], tempo: 0.7, type: 'sine' },
+            boss: { melody: ['C4','D#4','G4','C5','D#5','G5','D#5','C5'], bass: ['C2','C2','G2','C2'], tempo: 1.3, type: 'sawtooth' }
+        };
+    }
+    initialize() {
+        if (this.initialized) return;
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.audioContext.createGain(); this.masterGain.gain.value = 0.5;
+            this.masterGain.connect(this.audioContext.destination);
+            this.musicGain = this.audioContext.createGain(); this.musicGain.gain.value = 0.35;
+            this.musicGain.connect(this.masterGain);
+            this.initialized = true;
+        } catch (e) { console.error('Audio init failed:', e); }
+    }
+    playNote(freq, duration, type='square', gain=0.3, startTime=null) {
+        if (!this.initialized || !this.musicEnabled) return;
+        const ctx = this.audioContext, time = startTime || ctx.currentTime;
+        const osc = ctx.createOscillator(), noteGain = ctx.createGain();
+        osc.type = type; osc.frequency.value = freq;
+        noteGain.gain.setValueAtTime(0, time);
+        noteGain.gain.linearRampToValueAtTime(gain, time + 0.01);
+        noteGain.gain.linearRampToValueAtTime(gain * 0.7, time + 0.05);
+        noteGain.gain.setValueAtTime(gain * 0.7, time + duration - 0.05);
+        noteGain.gain.linearRampToValueAtTime(0.001, time + duration);
+        osc.connect(noteGain); noteGain.connect(this.musicGain);
+        osc.start(time); osc.stop(time + duration);
+    }
+    playSFX(type) {
+        if (!this.initialized || !this.sfxEnabled) return;
+        const ctx = this.audioContext, time = ctx.currentTime;
+        const sfxGain = ctx.createGain(); sfxGain.gain.value = 0.5; sfxGain.connect(this.masterGain);
+        if (type === 'win') {
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                const osc = ctx.createOscillator(), g = ctx.createGain();
+                osc.type = 'square'; osc.frequency.value = freq;
+                g.gain.setValueAtTime(0.4, time + i * 0.08);
+                g.gain.exponentialRampToValueAtTime(0.01, time + i * 0.08 + 0.15);
+                osc.connect(g); g.connect(sfxGain);
+                osc.start(time + i * 0.08); osc.stop(time + i * 0.08 + 0.15);
+            });
+        } else if (type === 'lose') {
+            const osc = ctx.createOscillator(), g = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(300, time);
+            osc.frequency.exponentialRampToValueAtTime(100, time + 0.3);
+            g.gain.setValueAtTime(0.5, time);
+            g.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
+            osc.connect(g); g.connect(sfxGain);
+            osc.start(time); osc.stop(time + 0.3);
+        } else if (type === 'speedup') {
+            for (let i = 0; i < 8; i++) {
+                const osc = ctx.createOscillator(), g = ctx.createGain();
+                osc.type = 'square'; osc.frequency.value = 400 + i * 100;
+                g.gain.setValueAtTime(0.3, time + i * 0.04);
+                g.gain.exponentialRampToValueAtTime(0.01, time + i * 0.04 + 0.06);
+                osc.connect(g); g.connect(sfxGain);
+                osc.start(time + i * 0.04); osc.stop(time + i * 0.04 + 0.06);
+            }
+        } else if (type === 'click') {
+            const osc = ctx.createOscillator(), g = ctx.createGain();
+            osc.type = 'square'; osc.frequency.value = 800;
+            g.gain.setValueAtTime(0.2, time);
+            g.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+            osc.connect(g); g.connect(sfxGain);
+            osc.start(time); osc.stop(time + 0.05);
+        }
+    }
+    // Transition Jingle - wird schneller mit gameSpeed
+    playTransitionJingle(gameSpeed = 1.0) {
+        if (!this.initialized || !this.sfxEnabled) return;
+        const ctx = this.audioContext, time = ctx.currentTime;
+        const sfxGain = ctx.createGain(); sfxGain.gain.value = 0.4; sfxGain.connect(this.masterGain);
+        const speed = Math.min(gameSpeed, 2.0);
+        const notes = [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25];
+        notes.forEach((freq, i) => {
+            const osc = ctx.createOscillator(), g = ctx.createGain();
+            osc.type = 'square'; osc.frequency.value = freq;
+            const noteTime = time + i * (0.08 / speed);
+            g.gain.setValueAtTime(0.35, noteTime);
+            g.gain.exponentialRampToValueAtTime(0.01, noteTime + (0.12 / speed));
+            osc.connect(g); g.connect(sfxGain);
+            osc.start(noteTime); osc.stop(noteTime + (0.12 / speed));
+        });
+    }
+    // Boss Jingle
+    playBossJingle() {
+        if (!this.initialized || !this.sfxEnabled) return;
+        const ctx = this.audioContext, time = ctx.currentTime;
+        const sfxGain = ctx.createGain(); sfxGain.gain.value = 0.5; sfxGain.connect(this.masterGain);
+        const notes = [130.81, 155.56, 164.81, 196, 164.81, 155.56, 130.81];
+        notes.forEach((freq, i) => {
+            const osc = ctx.createOscillator(), g = ctx.createGain();
+            osc.type = 'sawtooth'; osc.frequency.value = freq;
+            g.gain.setValueAtTime(0.5, time + i * 0.15);
+            g.gain.exponentialRampToValueAtTime(0.01, time + i * 0.15 + 0.2);
+            osc.connect(g); g.connect(sfxGain);
+            osc.start(time + i * 0.15); osc.stop(time + i * 0.15 + 0.2);
+        });
+    }
+    setMusicStyle(style) {
+        if (this.musicStyles[style]) {
+            this.currentMusicStyle = style;
+        }
+    }
+    startMusic(style = null) {
+        if (!this.initialized || this.isPlaying || !this.musicEnabled) return;
+        if (style) this.currentMusicStyle = style;
+        this.isPlaying = true;
+        this.nextNoteTime = this.audioContext.currentTime;
+        this.currentBeat = 0;
+        this.scheduleMusic();
+    }
+    scheduleMusic() {
+        if (!this.isPlaying) return;
+        const style = this.musicStyles[this.currentMusicStyle] || this.musicStyles.main;
+        const secPerBeat = 60.0 / (this.currentBPM * style.tempo);
+        while (this.nextNoteTime < this.audioContext.currentTime + 0.1) {
+            this.playStyleBeat(this.nextNoteTime, this.currentBeat, style);
+            this.nextNoteTime += secPerBeat / 4;
+            this.currentBeat = (this.currentBeat + 1) % 64;
+        }
+        this.timerID = setTimeout(() => this.scheduleMusic(), 25);
+    }
+    playStyleBeat(time, beat, style) {
+        const ctx = this.audioContext, beatInBar = beat % 16;
+        // Kick drum
+        if (beatInBar === 0 || beatInBar === 8) {
+            const osc = ctx.createOscillator(), g = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(150, time);
+            osc.frequency.exponentialRampToValueAtTime(40, time + 0.1);
+            g.gain.setValueAtTime(0.7, time);
+            g.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+            osc.connect(g); g.connect(this.musicGain);
+            osc.start(time); osc.stop(time + 0.15);
+        }
+        // Snare
+        if (beatInBar === 4 || beatInBar === 12) {
+            const bufSize = ctx.sampleRate * 0.1;
+            const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+            const data = buf.getChannelData(0);
+            for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+            const noise = ctx.createBufferSource(); noise.buffer = buf;
+            const g = ctx.createGain(), filter = ctx.createBiquadFilter();
+            filter.type = 'highpass'; filter.frequency.value = 1000;
+            g.gain.setValueAtTime(0.35, time);
+            g.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+            noise.connect(filter); filter.connect(g); g.connect(this.musicGain);
+            noise.start(time); noise.stop(time + 0.1);
+        }
+        // Hi-hat
+        if (beatInBar % 2 === 0) {
+            const bufSize = ctx.sampleRate * 0.03;
+            const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+            const data = buf.getChannelData(0);
+            for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+            const noise = ctx.createBufferSource(); noise.buffer = buf;
+            const g = ctx.createGain(), filter = ctx.createBiquadFilter();
+            filter.type = 'highpass'; filter.frequency.value = 7000;
+            g.gain.setValueAtTime(0.12, time);
+            g.gain.exponentialRampToValueAtTime(0.01, time + 0.03);
+            noise.connect(filter); filter.connect(g); g.connect(this.musicGain);
+            noise.start(time); noise.stop(time + 0.03);
+        }
+        // Bass
+        if (beatInBar % 4 === 0) {
+            const bassIdx = Math.floor(beat / 4) % style.bass.length;
+            const bassNote = style.bass[bassIdx];
+            const freq = this.noteFreq[bassNote];
+            if (freq) this.playNote(freq, (60.0 / this.currentBPM) * 0.8, 'sawtooth', 0.22, time);
+        }
+        // Melody
+        if (beatInBar % 2 === 0) {
+            const melIdx = Math.floor(beat / 2) % style.melody.length;
+            const melNote = style.melody[melIdx];
+            const freq = this.noteFreq[melNote];
+            if (freq) this.playNote(freq, (60.0 / this.currentBPM) * 0.5, style.type, 0.18, time);
+        }
+    }
+    stopMusic() { this.isPlaying = false; if (this.timerID) { clearTimeout(this.timerID); this.timerID = null; } }
+    setBPM(bpm) { this.currentBPM = Math.min(220, Math.max(100, bpm)); }
+    toggleMusic() { this.musicEnabled = !this.musicEnabled; if (!this.musicEnabled) this.stopMusic(); return this.musicEnabled; }
+    toggleSFX() { this.sfxEnabled = !this.sfxEnabled; return this.sfxEnabled; }
+}
+const musicEngine = new MusicEngine();
+
+// PlayerData
+class PlayerDataManager {
+    constructor() { this.loadData(); }
+    loadData() {
+        try {
+            const stored = localStorage.getItem('zobelware_v2');
+            if (stored) {
+                const d = JSON.parse(stored);
+                this.coins = d.coins || 0;
+                this.highScore = d.highScore || 0;
+                this.gameStats = d.gameStats || {};
+                this.ownedItems = d.ownedItems || ['default'];
+                this.activeZobelColor = d.activeZobelColor || 0x00ff88;
+                this.activeBackground = d.activeBackground || 'default';
+                this.activeParticles = d.activeParticles || 'none';
+            } else { this.reset(); }
+        } catch (e) { this.reset(); }
+    }
+    reset() {
+        this.coins = 0; this.highScore = 0; this.gameStats = {};
+        this.ownedItems = ['default'];
+        this.activeZobelColor = 0x00ff88;
+        this.activeBackground = 'default';
+        this.activeParticles = 'none';
+    }
+    saveData() {
+        try {
+            localStorage.setItem('zobelware_v2', JSON.stringify({
+                coins: this.coins, highScore: this.highScore, gameStats: this.gameStats,
+                ownedItems: this.ownedItems, activeZobelColor: this.activeZobelColor,
+                activeBackground: this.activeBackground, activeParticles: this.activeParticles
+            }));
+        } catch (e) {}
+    }
+    addCoins(n) { this.coins += n; this.saveData(); }
+    spendCoins(n) { if (this.coins >= n) { this.coins -= n; this.saveData(); return true; } return false; }
+    updateHighScore(s) { if (s > this.highScore) { this.highScore = s; this.saveData(); return true; } return false; }
+    trackGame(key, won) { if (!this.gameStats[key]) this.gameStats[key] = { played: 0, won: 0 }; this.gameStats[key].played++; if (won) this.gameStats[key].won++; this.saveData(); }
+    getWinRate(key) { const s = this.gameStats[key]; if (!s || s.played === 0) return 0; return Math.round((s.won / s.played) * 100); }
+    buyItem(itemId) { if (!this.ownedItems.includes(itemId)) { this.ownedItems.push(itemId); this.saveData(); } }
+    ownsItem(itemId) { return this.ownedItems.includes(itemId); }
+    setZobelColor(color) { this.activeZobelColor = color; this.saveData(); }
+    setBackground(bg) { this.activeBackground = bg; this.saveData(); }
+    setParticles(p) { this.activeParticles = p; this.saveData(); }
+}
+const playerData = new PlayerDataManager();
+
+const Zobel = {
+    win: ['Nice!', 'Perfekt!', 'Super!', 'Wow!', 'Stark!'],
+    lose: ['Oops!', 'Aua!', 'Schade!', 'Nochmal!'],
+    speedUp: ['Schneller!', 'Tempo!', 'Turbo!'],
+    getWin() { return this.win[Math.floor(Math.random() * this.win.length)]; },
+    getLose() { return this.lose[Math.floor(Math.random() * this.lose.length)]; },
+    getSpeedUp() { return this.speedUp[Math.floor(Math.random() * this.speedUp.length)]; },
+    // Zeichnet das Zobel-Maskottchen
+    draw(scene, x, y, scale = 1, color = 0x00ff88) {
+        const container = scene.add.container(x, y);
+        const g = scene.add.graphics();
+        // Körper (Oval)
+        g.fillStyle(color);
+        g.fillEllipse(0, 0, 60 * scale, 80 * scale);
+        // Kopf
+        g.fillEllipse(0, -50 * scale, 50 * scale, 45 * scale);
+        // Ohren
+        g.fillTriangle(-20 * scale, -70 * scale, -30 * scale, -95 * scale, -10 * scale, -80 * scale);
+        g.fillTriangle(20 * scale, -70 * scale, 30 * scale, -95 * scale, 10 * scale, -80 * scale);
+        // Augen
+        g.fillStyle(0xffffff);
+        g.fillCircle(-12 * scale, -55 * scale, 8 * scale);
+        g.fillCircle(12 * scale, -55 * scale, 8 * scale);
+        g.fillStyle(0x000000);
+        g.fillCircle(-10 * scale, -53 * scale, 4 * scale);
+        g.fillCircle(14 * scale, -53 * scale, 4 * scale);
+        // Nase
+        g.fillStyle(0xff6b6b);
+        g.fillCircle(0, -42 * scale, 5 * scale);
+        // Schwanz
+        g.fillStyle(color);
+        g.fillEllipse(35 * scale, 10 * scale, 40 * scale, 15 * scale);
+        // Füße
+        g.fillEllipse(-15 * scale, 45 * scale, 18 * scale, 10 * scale);
+        g.fillEllipse(15 * scale, 45 * scale, 18 * scale, 10 * scale);
+        container.add(g);
+        return container;
+    }
+};
+
+// CHARAKTER-SYSTEM
+const CharacterManager = {
+    currentCharacter: 'zobel',
+    characterIndex: 0,
+    characters: ['zobel', 'swaggy', 'dude'],
+
+    // Charakter-Definitionen
+    data: {
+        zobel: {
+            name: 'Zobel',
+            color: 0x8B7355,  // Braun wie das echte Zobel
+            image: 'zobel',
+            scale: 0.25,  // Zobel.png ist ca. 330x200px
+            jingleNotes: [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25],
+            games: [
+                { key: 'ZobelFrogger', name: 'ÜBERQUEREN!', duration: 6000, keys: '← ↑ → ↓', music: 'tense' },
+                { key: 'ZobelJump', name: 'SPRINGEN!', duration: 5000, keys: 'SPACE', music: 'action' },
+                { key: 'ZobelCatch', name: 'FANGEN!', duration: 5000, keys: '🖱️ MAUS', music: 'happy' },
+                { key: 'FeedZobel', name: 'FÜTTERN!', duration: 4000, keys: '🖱️ KLICK', music: 'happy' },
+                { key: 'ZobelDance', name: 'TANZEN!', duration: 5000, keys: '← ↑ → ↓', music: 'rush' },
+                { key: 'DodgeTheBall', name: 'AUSWEICHEN!', duration: 4000, keys: '← →', music: 'tense' },
+                { key: 'CatchTheGem', name: 'EDELSTEIN!', duration: 3000, keys: '🖱️ MAUS', music: 'action' },
+                { key: 'BalanceStick', name: 'BALANCE!', duration: 4000, keys: '🖱️ MAUS', music: 'calm' },
+                { key: 'ZobelHide', name: 'VERSTECKEN!', duration: 3000, keys: '🖱️ KLICK', music: 'tense' },
+                { key: 'ZobelRun', name: 'RENNEN!', duration: 4000, keys: '← →', music: 'rush' }
+            ],
+            boss: { key: 'BossGame', name: 'ZOBEL BOSS!' }
+        },
+        swaggy: {
+            name: 'Swaggy',
+            color: 0xFFA500,  // Orange wie der Fisch
+            image: 'swaggy',
+            scale: 0.12,  // swaggy.png ist ca. 480x480px Pixel-Art
+            jingleNotes: [392, 440, 523.25, 659.25, 523.25, 440, 392],
+            games: [
+                { key: 'SwaggySwim', name: 'SCHWIMMEN!', duration: 5000, keys: '← ↑ → ↓', music: 'happy' },
+                { key: 'SwaggyBubble', name: 'BLASEN!', duration: 4000, keys: 'SPACE', music: 'calm' },
+                { key: 'SwaggyDance', name: 'PARTY!', duration: 4000, keys: '← ↑ → ↓', music: 'rush' },
+                { key: 'PumpTheBalloon', name: 'PUMPEN!', duration: 4000, keys: '← →', music: 'rush' },
+                { key: 'ColorMatch', name: 'FARBEN!', duration: 3500, keys: '🖱️ KLICK', music: 'happy' },
+                { key: 'MemoryClick', name: 'MERKEN!', duration: 6000, keys: '🖱️ KLICK', music: 'calm' },
+                { key: 'ConnectTheLovers', name: 'VERBINDEN!', duration: 5000, keys: '🖱️ DRAG', music: 'happy' },
+                { key: 'DontPress', name: 'NICHT!', duration: 3000, keys: '🚫 WARTE', music: 'tense' },
+                { key: 'SpotTheOdd', name: 'FINDE!', duration: 4000, keys: '🖱️ KLICK', music: 'puzzle' },
+                { key: 'SwaggyFish', name: 'FISCHEN!', duration: 4000, keys: '🖱️ KLICK', music: 'calm' }
+            ],
+            boss: { key: 'SwaggyBoss', name: 'SWAGGY BOSS!' }
+        },
+        dude: {
+            name: 'Dude',
+            color: 0x4169E1,  // Blau
+            image: 'dude',
+            scale: 3.0,  // Dude ist kleines Pixel-Art, muss vergrößert werden
+            frameWidth: 32,  // Spritesheet frame width
+            jingleNotes: [261.63, 329.63, 392, 523.25, 392, 329.63],
+            games: [
+                { key: 'DudeRun', name: 'LAUFEN!', duration: 5000, keys: '← →', music: 'action' },
+                { key: 'DudeDodge', name: 'AUSWEICHEN!', duration: 4000, keys: '← →', music: 'tense' },
+                { key: 'DudeJump', name: 'SPRINGEN!', duration: 4000, keys: 'SPACE', music: 'action' },
+                { key: 'ClickTheButton', name: 'KLICK!', duration: 3000, keys: '🖱️ KLICK', music: 'action' },
+                { key: 'MashTheKey', name: 'HÄMMERN!', duration: 3500, keys: '⌨️ ALLE', music: 'rush' },
+                { key: 'StopTheBar', name: 'STOPP!', duration: 4000, keys: 'SPACE', music: 'calm' },
+                { key: 'HitTheTarget', name: 'TREFFEN!', duration: 3000, keys: '🖱️ KLICK', music: 'action' },
+                { key: 'FastClicker', name: 'SCHNELL!', duration: 3500, keys: '🖱️ KLICK', music: 'rush' },
+                { key: 'TypeTheWord', name: 'TIPPEN!', duration: 5000, keys: '⌨️ ABC', music: 'puzzle' },
+                { key: 'MathQuiz', name: 'MATHE!', duration: 4000, keys: '← →', music: 'puzzle' }
+            ],
+            boss: { key: 'BoxingBoss', name: 'BOXING BOSS!' }
+        }
+    },
+
+    getCurrentCharacter() {
+        return this.data[this.currentCharacter];
+    },
+
+    getCharacterByName(name) {
+        return this.data[name];
+    },
+
+    nextCharacter() {
+        this.characterIndex = (this.characterIndex + 1) % this.characters.length;
+        this.currentCharacter = this.characters[this.characterIndex];
+        return this.getCurrentCharacter();
+    },
+
+    setCharacter(name) {
+        if (this.data[name]) {
+            this.currentCharacter = name;
+            this.characterIndex = this.characters.indexOf(name);
+        }
+    },
+
+    getRandomGame() {
+        const char = this.getCurrentCharacter();
+        return Phaser.Utils.Array.GetRandom(char.games);
+    },
+
+    getBoss() {
+        return this.getCurrentCharacter().boss;
+    },
+
+    // Zeichnet den aktuellen Charakter (für Szenen die kein Bild haben)
+    draw(scene, x, y, scale = 1) {
+        const char = this.getCurrentCharacter();
+        if (scene.textures.exists(char.image)) {
+            const img = scene.add.image(x, y, char.image).setScale(char.scale * scale);
+            return img;
+        }
+        // Fallback auf gezeichnetes Zobel
+        return Zobel.draw(scene, x, y, scale, char.color);
+    },
+
+    // Spielt den Charakter-Jingle
+    playJingle(gameSpeed = 1.0) {
+        if (!musicEngine.initialized || !musicEngine.sfxEnabled) return;
+        const char = this.getCurrentCharacter();
+        const ctx = musicEngine.audioContext, time = ctx.currentTime;
+        const sfxGain = ctx.createGain();
+        sfxGain.gain.value = 0.4;
+        sfxGain.connect(musicEngine.masterGain);
+        const speed = Math.min(gameSpeed, 2.0);
+        char.jingleNotes.forEach((freq, i) => {
+            const osc = ctx.createOscillator(), g = ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.value = freq;
+            const noteTime = time + i * (0.08 / speed);
+            g.gain.setValueAtTime(0.35, noteTime);
+            g.gain.exponentialRampToValueAtTime(0.01, noteTime + (0.12 / speed));
+            osc.connect(g);
+            g.connect(sfxGain);
+            osc.start(noteTime);
+            osc.stop(noteTime + (0.12 / speed));
+        });
+    }
+};
+
+// BaseMicrogame
+class BaseMicrogame extends Phaser.Scene {
+    init(data) { this.parentScene = data.parentScene; this.gameSpeed = data.gameSpeed || 1.0; this.duration = (data.duration || 4000) / this.gameSpeed; this.practiceMode = data.practiceMode || false; }
+    create() {
+        this.hasEnded = false;
+        this.fuseBackground = this.add.rectangle(100, 575, 600, 14, 0x333333).setOrigin(0, 0.5);
+        this.fuse = this.add.rectangle(100, 575, 600, 14, 0x00ff88).setOrigin(0, 0.5);
+        this.spark = this.add.circle(700, 575, 5, 0xffffff);
+        this.inputBufferActive = true;
+        this.time.delayedCall(150, () => { this.inputBufferActive = false; });
+        this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
+    }
+    startTimer() { this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.lose(); }); }
+    update() {
+        if (this.hasEnded || !this.gameTimer) return;
+        const p = this.gameTimer.getProgress();
+        this.fuse.width = 600 * (1 - p);
+        this.spark.x = 100 + this.fuse.width;
+        this.fuse.setFillStyle((Math.floor(p * 255) << 16) | (Math.floor((1 - p) * 255) << 8));
+    }
+    win() {
+        if (this.hasEnded) return; this.hasEnded = true;
+        if (this.gameTimer) this.gameTimer.remove();
+        this.cameras.main.flash(150, 0, 255, 136);
+        musicEngine.playSFX('win');
+        if (this.practiceMode) { this.time.delayedCall(800, () => { this.scene.restart({ parentScene: null, gameSpeed: this.gameSpeed, duration: this.duration * this.gameSpeed, practiceMode: true }); }); }
+        else if (this.parentScene) { this.parentScene.microgameWon(this.scene.key); this.scene.stop(); }
+    }
+    lose() {
+        if (this.hasEnded) return; this.hasEnded = true;
+        if (this.gameTimer) this.gameTimer.remove();
+        this.cameras.main.shake(200, 0.02); this.cameras.main.flash(150, 255, 0, 0);
+        musicEngine.playSFX('lose');
+        if (this.practiceMode) { this.time.delayedCall(800, () => { this.scene.restart({ parentScene: null, gameSpeed: this.gameSpeed, duration: this.duration * this.gameSpeed, practiceMode: true }); }); }
+        else if (this.parentScene) { this.parentScene.microgameLost(this.scene.key); this.scene.stop(); }
+    }
+    exitToMenu() { this.hasEnded = true; if (this.gameTimer) this.gameTimer.remove(); musicEngine.stopMusic(); this.scene.stop(); if (this.parentScene) this.parentScene.scene.stop(); this.scene.start('StartScreen'); }
+    spawnAwayFromCursor(minDist = 150) { const cursor = this.input.activePointer; let x, y, attempts = 0; do { x = Phaser.Math.Between(100, 700); y = Phaser.Math.Between(120, 500); attempts++; } while (Phaser.Math.Distance.Between(cursor.x, cursor.y, x, y) < minDist && attempts < 20); return { x, y }; }
+}
+
+// MINISPIELE
+class ClickTheButton extends BaseMicrogame {
+    constructor() { super({ key: 'ClickTheButton' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'KLICK!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const pos = this.spawnAwayFromCursor(180); const btn = this.add.rectangle(pos.x, pos.y, 160, 90, 0x00ff88).setInteractive({ useHandCursor: true }); btn.setStrokeStyle(4, 0xffffff); this.add.text(pos.x, pos.y, 'KLICK!', { font: 'bold 26px Orbitron', fill: '#000' }).setOrigin(0.5); btn.on('pointerdown', () => { if (!this.inputBufferActive) this.win(); }); btn.on('pointerover', () => btn.setScale(1.1)); btn.on('pointerout', () => btn.setScale(1)); this.startTimer(); }
+}
+
+class DodgeTheBall extends BaseMicrogame {
+    constructor() { super({ key: 'DodgeTheBall' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+        this.add.text(400, 60, 'WEICHE AUS!', { font: 'bold 40px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5);
+
+        // Spieler
+        this.player = this.add.rectangle(400, 500, 50, 50, 0x00ff88);
+        this.physics.add.existing(this.player);
+        this.player.body.setCollideWorldBounds(true);
+        this.cursors = this.input.keyboard.createCursorKeys();
+
+        // Bälle die fallen
+        this.balls = [];
+        for (let i = 0; i < 8; i++) {
+            const ball = this.add.circle(Phaser.Math.Between(50, 750), -Phaser.Math.Between(50, 400), 15, 0xff6b6b);
+            this.physics.add.existing(ball);
+            ball.body.setVelocityY(Phaser.Math.Between(200, 350) * this.gameSpeed);
+            this.balls.push(ball);
+        }
+
+        // Timer - überleben = gewinnen
+        this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.win(); });
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        // Spieler Bewegung
+        this.player.body.setVelocityX(0);
+        if (this.cursors.left.isDown) this.player.body.setVelocityX(-400);
+        else if (this.cursors.right.isDown) this.player.body.setVelocityX(400);
+
+        // Kollision prüfen
+        const playerBounds = this.player.getBounds();
+        for (const ball of this.balls) {
+            if (!ball.active) continue;
+            const dist = Phaser.Math.Distance.Between(ball.x, ball.y, this.player.x, this.player.y);
+            if (dist < 40) {
+                this.lose();
+                return;
+            }
+        }
+    }
+}
+
+class MashTheKey extends BaseMicrogame {
+    constructor() { super({ key: 'MashTheKey' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#7e22ce'); this.add.text(400, 60, 'HÄMMERN!', { font: 'bold 48px Orbitron', fill: '#fff' }).setOrigin(0.5); this.mashCount = 0; this.targetMashes = Math.floor(12 + this.gameSpeed * 3); this.countText = this.add.text(400, 300, '0', { font: 'bold 100px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.text(400, 420, 'Ziel: ' + this.targetMashes, { font: '28px Orbitron', fill: '#fff' }).setOrigin(0.5); this.input.keyboard.on('keydown', () => { if (this.hasEnded || this.inputBufferActive) return; this.mashCount++; this.countText.setText(this.mashCount.toString()); this.countText.setScale(1 + this.mashCount / this.targetMashes * 0.3); if (this.mashCount >= this.targetMashes) this.win(); }); this.startTimer(); }
+}
+
+class StopTheBar extends BaseMicrogame {
+    constructor() { super({ key: 'StopTheBar' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'STOPP!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.rectangle(400, 300, 80, 150, 0x00ff88, 0.3); this.add.rectangle(400, 300, 80, 150).setStrokeStyle(4, 0x00ff88); this.movingBar = this.add.rectangle(100, 300, 25, 150, 0xff6b6b); this.tweens.add({ targets: this.movingBar, x: 700, duration: 800 / this.gameSpeed, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.input.keyboard.on('keydown-SPACE', () => { if (this.hasEnded || this.inputBufferActive) return; if (this.movingBar.x >= 360 && this.movingBar.x <= 440) this.win(); else this.lose(); }); this.startTimer(); }
+}
+
+class CatchTheGem extends BaseMicrogame {
+    constructor() { super({ key: 'CatchTheGem' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'FANGEN!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.catcher = this.add.rectangle(400, 520, 120, 30, 0x00ff88); this.physics.world.enable(this.catcher); this.catcher.body.setImmovable(true); this.gem = this.add.circle(Phaser.Math.Between(100, 700), -30, 20, 0xff6b6b); this.physics.world.enable(this.gem); this.gem.body.velocity.y = 350 * this.gameSpeed; this.physics.add.overlap(this.catcher, this.gem, () => this.win(), null, this); this.startTimer(); }
+    update() { super.update(); if (this.hasEnded) return; this.catcher.x = Phaser.Math.Clamp(this.input.x, 60, 740); if (this.gem.y > 600) this.lose(); }
+}
+
+class DragToTarget extends BaseMicrogame {
+    constructor() { super({ key: 'DragToTarget' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'ZIEHEN!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.zone(620, 300, 180, 180).setRectangleDropZone(180, 180); this.add.rectangle(620, 300, 180, 180).setStrokeStyle(4, 0x00ff88); this.add.text(620, 300, 'ZIEL', { font: '26px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const draggable = this.add.rectangle(180, 300, 100, 100, 0xff6b6b).setInteractive({ draggable: true }); draggable.setStrokeStyle(3, 0xffffff); this.input.on('drag', (p, obj, x, y) => obj.setPosition(x, y)); this.input.on('drop', () => this.win()); this.startTimer(); }
+}
+
+class TypeTheWord extends BaseMicrogame {
+    constructor() { super({ key: 'TypeTheWord' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'TIPPEN!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const words = ['SPIEL', 'CODE', 'BOSS', 'NEON', 'TURBO', 'PIXEL']; this.targetWord = Phaser.Utils.Array.GetRandom(words); this.playerInput = ''; this.add.text(400, 220, this.targetWord, { font: 'bold 64px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.playerText = this.add.text(400, 340, '_', { font: 'bold 64px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5); this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; if (e.keyCode === 8 && this.playerInput.length > 0) this.playerInput = this.playerInput.slice(0, -1); else if (e.key.match(/^[A-Za-z]$/)) this.playerInput += e.key.toUpperCase(); this.playerText.setText(this.playerInput || '_'); if (this.playerInput === this.targetWord) this.win(); }); this.startTimer(); }
+}
+
+class ConnectTheLovers extends BaseMicrogame {
+    constructor() { super({ key: 'ConnectTheLovers' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'VERBINDE!', { font: 'bold 48px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5); this.startC = this.add.circle(120, 300, 45, 0x00d4ff).setInteractive({ useHandCursor: true }); this.startC.setStrokeStyle(4, 0xffffff); this.endC = this.add.circle(680, 300, 45, 0xff6b6b); this.endC.setStrokeStyle(4, 0xffffff); this.lineGfx = this.add.graphics(); this.isDrawing = false; this.startC.on('pointerdown', () => { if (this.inputBufferActive) return; this.isDrawing = true; this.lineGfx.clear(); this.lineGfx.lineStyle(6, 0xff6b6b); this.lineGfx.moveTo(120, 300); }); this.input.on('pointermove', (p) => { if (this.isDrawing && !this.hasEnded) { this.lineGfx.lineTo(p.x, p.y); this.lineGfx.stroke(); } }); this.input.on('pointerup', (p) => { if (this.isDrawing && !this.hasEnded) { this.isDrawing = false; if (Phaser.Math.Distance.Between(p.x, p.y, 680, 300) <= 70) this.win(); else this.lose(); } }); this.startTimer(); }
+}
+
+class PumpTheBalloon extends BaseMicrogame {
+    constructor() { super({ key: 'PumpTheBalloon' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'PUMPEN!', { font: 'bold 48px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5); this.add.text(400, 500, '← → abwechselnd', { font: '22px Orbitron', fill: '#888' }).setOrigin(0.5); this.balloon = this.add.circle(400, 280, 50, 0xff6b6b); this.balloon.setStrokeStyle(3, 0xffffff); this.pumps = 0; this.targetPumps = 10; this.lastKey = null; this.pumpText = this.add.text(400, 420, '0 / ' + this.targetPumps, { font: 'bold 32px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; if (e.keyCode === 37 && this.lastKey !== 'left') { this.pumps++; this.lastKey = 'left'; } else if (e.keyCode === 39 && this.lastKey !== 'right') { this.pumps++; this.lastKey = 'right'; } this.balloon.setScale(1 + (this.pumps / this.targetPumps) * 0.8); this.pumpText.setText(this.pumps + ' / ' + this.targetPumps); if (this.pumps >= this.targetPumps) this.win(); }); this.startTimer(); }
+}
+
+class Safecracker extends BaseMicrogame {
+    constructor() { super({ key: 'Safecracker' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#4a69bd'); this.codeLength = 3 + Math.floor((this.gameSpeed - 1) * 2); this.code = []; this.playerIndex = 0; const arrows = ['◀', '▲', '▶', '▼']; for (let i = 0; i < this.codeLength; i++) this.code.push(Phaser.Math.Between(0, 3)); this.add.text(400, 200, this.code.map(d => arrows[d]).join(' '), { font: 'bold 56px Orbitron', fill: '#fff' }).setOrigin(0.5); this.add.text(400, 340, 'Gib den Code ein!', { font: '32px Orbitron', fill: '#fdcb6e' }).setOrigin(0.5); this.inputDisplay = this.add.text(400, 420, '', { font: '40px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const keyMap = { 37: 0, 38: 1, 39: 2, 40: 3 }; this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; const dir = keyMap[e.keyCode]; if (dir === undefined) return; if (dir === this.code[this.playerIndex]) { this.playerIndex++; this.inputDisplay.setText(this.inputDisplay.text + '✓ '); if (this.playerIndex === this.codeLength) this.win(); } else { this.inputDisplay.setText('✗').setColor('#ff0000'); this.time.delayedCall(300, () => this.lose()); } }); this.startTimer(); }
+}
+
+class MatchTheShape extends BaseMicrogame {
+    constructor() { super({ key: 'MatchTheShape' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#8e44ad'); const shapes = ['circle', 'square', 'triangle']; this.currentShape = Phaser.Utils.Array.GetRandom(shapes); const gfx = this.add.graphics({ fillStyle: { color: 0xffffff } }); let instruction = ''; switch (this.currentShape) { case 'circle': gfx.fillCircle(400, 280, 80); instruction = 'C = Kreis'; this.correctKey = 'C'; break; case 'square': gfx.fillRect(320, 200, 160, 160); instruction = 'S = Quadrat'; this.correctKey = 'S'; break; case 'triangle': gfx.fillTriangle(400, 200, 310, 360, 490, 360); instruction = 'T = Dreieck'; this.correctKey = 'T'; break; } this.add.text(400, 450, instruction, { font: 'bold 32px Orbitron', fill: '#fff' }).setOrigin(0.5); this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; const k = e.key.toUpperCase(); if (k === this.correctKey) this.win(); else if (['C', 'S', 'T'].includes(k)) this.lose(); }); this.startTimer(); }
+}
+
+class HitTheTarget extends BaseMicrogame {
+    constructor() { super({ key: 'HitTheTarget' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'TRIFF!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.target = this.add.circle(400, 300, 60, 0xff6b6b); this.target.setStrokeStyle(6, 0x00ff88); this.tweens.add({ targets: this.target, x: { from: 150, to: 650 }, duration: 2500 / this.gameSpeed, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.crosshair = this.add.graphics({ lineStyle: { width: 4, color: 0x00ff88 } }); this.crosshair.lineBetween(-30, 0, 30, 0); this.crosshair.lineBetween(0, -30, 0, 30); this.input.on('pointerdown', (p) => { if (this.hasEnded || this.inputBufferActive) return; if (Phaser.Math.Distance.Between(p.x, p.y, this.target.x, this.target.y) <= 80) this.win(); else this.lose(); }); this.startTimer(); }
+    update() { super.update(); this.crosshair.x = this.input.x; this.crosshair.y = this.input.y; }
+}
+
+class TargetClick extends BaseMicrogame {
+    constructor() { super({ key: 'TargetClick' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#8e44ad'); this.add.text(400, 60, 'KLICK DEN KREIS!', { font: 'bold 34px Orbitron', fill: '#fff' }).setOrigin(0.5); const pos = this.spawnAwayFromCursor(180); this.target = this.add.circle(pos.x, pos.y, 35, 0xff0000).setInteractive({ useHandCursor: true }); this.tweens.add({ targets: this.target, x: Phaser.Math.Between(100, 700), y: Phaser.Math.Between(150, 450), duration: 1200 / this.gameSpeed, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.target.on('pointerdown', () => { if (!this.inputBufferActive) this.win(); }); this.startTimer(); }
+}
+
+class MathQuiz extends BaseMicrogame {
+    constructor() { super({ key: 'MathQuiz' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#28a745'); const n1 = Phaser.Math.Between(5, 30), n2 = Phaser.Math.Between(1, 15); const isAdd = Phaser.Math.Between(0, 1) === 0; let correctAns = isAdd ? n1 + n2 : Math.max(n1, n2) - Math.min(n1, n2); this.isCorrect = Phaser.Math.Between(0, 1) === 0; let displayedAns = this.isCorrect ? correctAns : correctAns + (Phaser.Math.Between(-3, 3) || 1); const eq = isAdd ? n1 + ' + ' + n2 + ' = ' + displayedAns : Math.max(n1, n2) + ' - ' + Math.min(n1, n2) + ' = ' + displayedAns; this.add.text(400, 250, eq, { font: 'bold 50px Orbitron', fill: '#fff' }).setOrigin(0.5); this.add.text(400, 380, '← Richtig    Falsch →', { font: '26px Orbitron', fill: '#fdcb6e' }).setOrigin(0.5); this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; if (e.keyCode === 37) { if (this.isCorrect) this.win(); else this.lose(); } else if (e.keyCode === 39) { if (!this.isCorrect) this.win(); else this.lose(); } }); this.startTimer(); }
+}
+
+class MemoryClick extends BaseMicrogame {
+    constructor() { super({ key: 'MemoryClick' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#9b59b6'); this.add.text(400, 60, 'MERKEN!', { font: 'bold 48px Orbitron', fill: '#fff' }).setOrigin(0.5); this.cells = []; this.sequence = [Phaser.Math.Between(0, 2), Phaser.Math.Between(0, 2), Phaser.Math.Between(0, 2)]; this.playerSequence = []; this.isPlayingSequence = true; const colors = [0xff6b6b, 0x4ecdc4, 0xffe66d]; const positions = [{ x: 200, y: 300 }, { x: 400, y: 300 }, { x: 600, y: 300 }]; for (let i = 0; i < 3; i++) { const cell = this.add.rectangle(positions[i].x, positions[i].y, 130, 130, colors[i]).setInteractive({ useHandCursor: true }); cell.index = i; cell.originalColor = colors[i]; this.cells.push(cell); cell.on('pointerdown', () => this.handleClick(cell)); } this.add.text(400, 480, 'Klicke in der richtigen Reihenfolge!', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5); let delay = 400; this.sequence.forEach((idx, i) => { this.time.delayedCall(delay + i * (600 / this.gameSpeed), () => this.flashCell(this.cells[idx])); }); this.time.delayedCall(delay + this.sequence.length * (600 / this.gameSpeed) + 200, () => { this.isPlayingSequence = false; this.startTimer(); }); }
+    flashCell(cell) { cell.setFillStyle(0xffffff); this.time.delayedCall(200, () => cell.setFillStyle(cell.originalColor)); }
+    handleClick(cell) { if (this.hasEnded || this.isPlayingSequence) return; this.flashCell(cell); this.playerSequence.push(cell.index); if (this.playerSequence[this.playerSequence.length - 1] !== this.sequence[this.playerSequence.length - 1]) { this.lose(); return; } if (this.playerSequence.length === 3) this.win(); }
+}
+
+class ColorMatch extends BaseMicrogame {
+    constructor() { super({ key: 'ColorMatch' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#2c3e50'); this.add.text(400, 60, 'FINDE DIE FARBE!', { font: 'bold 34px Orbitron', fill: '#fff' }).setOrigin(0.5); const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff]; this.targetIndex = Phaser.Math.Between(0, colors.length - 1); this.add.circle(400, 180, 50, colors[this.targetIndex]); const shuffled = Phaser.Utils.Array.Shuffle([...colors.keys()]); for (let i = 0; i < 4; i++) { const colorIdx = i === 0 ? this.targetIndex : shuffled.filter(s => s !== this.targetIndex)[i - 1]; const btn = this.add.rectangle(200 + i * 150, 380, 80, 80, colors[colorIdx]).setInteractive({ useHandCursor: true }); btn.on('pointerdown', () => { if (this.inputBufferActive) return; if (colorIdx === this.targetIndex) this.win(); else this.lose(); }); } this.startTimer(); }
+}
+
+class DontPress extends BaseMicrogame {
+    constructor() { super({ key: 'DontPress' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 100, 'NICHT DRÜCKEN!', { font: 'bold 44px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5); const btn = this.add.rectangle(400, 320, 200, 150, 0xff0000).setInteractive({ useHandCursor: true }); btn.setStrokeStyle(6, 0xffffff); this.add.text(400, 320, 'ROTER\nKNOPF', { font: 'bold 26px Orbitron', fill: '#fff', align: 'center' }).setOrigin(0.5); btn.on('pointerdown', () => { if (!this.inputBufferActive) this.lose(); }); this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.win(); }); }
+}
+
+class StopWatch extends BaseMicrogame {
+    constructor() { super({ key: 'StopWatch' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 80, 'STOPP BEI 3.00!', { font: 'bold 38px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.timeCounter = 0; this.isRunning = true; this.timeDisplay = this.add.text(400, 300, '0.00', { font: 'bold 90px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.text(400, 420, 'SPACE zum Stoppen', { font: '22px Orbitron', fill: '#888' }).setOrigin(0.5); this.timerEvent = this.time.addEvent({ delay: 10, callback: () => { if (this.isRunning && !this.hasEnded) { this.timeCounter += 10; this.timeDisplay.setText((this.timeCounter / 1000).toFixed(2)); } }, loop: true }); this.input.keyboard.on('keydown-SPACE', () => { if (!this.isRunning || this.hasEnded || this.inputBufferActive) return; this.isRunning = false; if (Math.abs((this.timeCounter / 1000) - 3.0) <= 0.15) this.win(); else this.lose(); }); this.gameTimer = this.time.delayedCall(6000 / this.gameSpeed, () => { if (!this.hasEnded && this.isRunning) this.lose(); }); }
+}
+
+class SpotTheOdd extends BaseMicrogame {
+    constructor() { super({ key: 'SpotTheOdd' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'FINDE DIE ANDERE!', { font: 'bold 34px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const positions = [{ x: 250, y: 280 }, { x: 550, y: 280 }, { x: 250, y: 420 }, { x: 550, y: 420 }]; const oddIndex = Phaser.Math.Between(0, 3); positions.forEach((pos, idx) => { const radius = idx === oddIndex ? 35 : 50; const color = idx === oddIndex ? 0xff6b6b : 0x00d4ff; const circle = this.add.circle(pos.x, pos.y, radius, color).setInteractive({ useHandCursor: true }); circle.setStrokeStyle(3, 0xffffff); circle.on('pointerdown', () => { if (this.inputBufferActive) return; if (idx === oddIndex) this.win(); else this.lose(); }); }); this.startTimer(); }
+}
+
+class BalanceStick extends BaseMicrogame {
+    constructor() { super({ key: 'BalanceStick' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'BALANCE!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.text(400, 500, 'Maus links/rechts', { font: '20px Orbitron', fill: '#888' }).setOrigin(0.5); this.stick = this.add.rectangle(400, 280, 20, 180, 0x00ff88); this.maxTilt = 0.5; this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.win(); }); }
+    update() { super.update(); if (this.hasEnded) return; const dist = this.input.x - 400; this.stick.rotation = Phaser.Math.Clamp(dist / 150, -1, 1) * this.maxTilt; if (Math.abs(this.stick.rotation) >= this.maxTilt) this.lose(); }
+}
+
+class FastClicker extends BaseMicrogame {
+    constructor() { super({ key: 'FastClicker' }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#7e22ce'); this.add.text(400, 60, 'SCHNELL KLICKEN!', { font: 'bold 38px Orbitron', fill: '#fff' }).setOrigin(0.5); this.clickCount = 0; this.targetClicks = Math.floor(10 + this.gameSpeed * 3); this.clickDisplay = this.add.text(400, 280, '0 / ' + this.targetClicks, { font: 'bold 58px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const clickZone = this.add.rectangle(400, 280, 350, 180, 0x00ff88, 0.1).setInteractive({ useHandCursor: true }); clickZone.setStrokeStyle(3, 0x00ff88); clickZone.on('pointerdown', () => { if (this.hasEnded || this.inputBufferActive) return; this.clickCount++; this.clickDisplay.setText(this.clickCount + ' / ' + this.targetClicks); if (this.clickCount >= this.targetClicks) this.win(); }); this.startTimer(); }
+}
+
+// ZOBEL MINISPIELE
+class ZobelFrogger extends BaseMicrogame {
+    constructor() { super({ key: 'ZobelFrogger' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#2d5a27');
+        this.add.text(400, 30, 'ÜBERQUERE DIE STRASSE!', { font: 'bold 32px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Straßen-Bahnen
+        this.add.rectangle(400, 150, 800, 80, 0x333333); // Straße 1
+        this.add.rectangle(400, 250, 800, 80, 0x333333); // Straße 2
+        this.add.rectangle(400, 350, 800, 80, 0x333333); // Straße 3
+
+        // Zielbereich
+        this.goalZone = this.add.rectangle(400, 70, 800, 60, 0x00ff88, 0.3);
+        this.add.text(400, 70, '🏁 ZIEL 🏁', { font: 'bold 24px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+
+        // Zobel Spieler
+        if (this.textures.exists('zobel')) {
+            this.zobel = this.add.image(400, 480, 'zobel').setScale(0.15);
+        } else {
+            this.zobel = Zobel.draw(this, 400, 480, 0.5, 0x00ff88);
+        }
+        this.physics.add.existing(this.zobel);
+        this.zobel.body.setSize(40, 60);
+
+        // Autos
+        this.cars = [];
+        const carColors = [0xff0000, 0x0000ff, 0xffff00, 0xff00ff];
+        // Reihe 1 - nach rechts
+        for (let i = 0; i < 3; i++) {
+            const car = this.add.rectangle(-100 + i * 300, 150, 80, 40, carColors[i % 4]);
+            this.physics.add.existing(car);
+            car.body.setVelocityX(150 * this.gameSpeed);
+            car.direction = 1;
+            this.cars.push(car);
+        }
+        // Reihe 2 - nach links
+        for (let i = 0; i < 3; i++) {
+            const car = this.add.rectangle(900 - i * 300, 250, 80, 40, carColors[(i + 1) % 4]);
+            this.physics.add.existing(car);
+            car.body.setVelocityX(-180 * this.gameSpeed);
+            car.direction = -1;
+            this.cars.push(car);
+        }
+        // Reihe 3 - nach rechts (schneller)
+        for (let i = 0; i < 4; i++) {
+            const car = this.add.rectangle(-50 + i * 250, 350, 70, 35, carColors[(i + 2) % 4]);
+            this.physics.add.existing(car);
+            car.body.setVelocityX(200 * this.gameSpeed);
+            car.direction = 1;
+            this.cars.push(car);
+        }
+
+        // Steuerung
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.canMove = true;
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        // Autos wrappen
+        this.cars.forEach(car => {
+            if (car.direction === 1 && car.x > 850) car.x = -50;
+            if (car.direction === -1 && car.x < -50) car.x = 850;
+        });
+
+        // Zobel Bewegung (Schritt-basiert)
+        if (this.canMove) {
+            if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+                this.zobel.y -= 100;
+                this.canMove = false;
+                this.time.delayedCall(150, () => this.canMove = true);
+            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down) && this.zobel.y < 480) {
+                this.zobel.y += 100;
+                this.canMove = false;
+                this.time.delayedCall(150, () => this.canMove = true);
+            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.left) && this.zobel.x > 50) {
+                this.zobel.x -= 80;
+            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.right) && this.zobel.x < 750) {
+                this.zobel.x += 80;
+            }
+        }
+
+        // Kollision mit Autos
+        for (const car of this.cars) {
+            if (Phaser.Geom.Intersects.RectangleToRectangle(
+                new Phaser.Geom.Rectangle(this.zobel.x - 20, this.zobel.y - 30, 40, 60),
+                car.getBounds()
+            )) {
+                this.lose();
+                return;
+            }
+        }
+
+        // Ziel erreicht?
+        if (this.zobel.y <= 100) {
+            this.win();
+        }
+    }
+}
+
+class ZobelJump extends BaseMicrogame {
+    constructor() { super({ key: 'ZobelJump' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#87ceeb');
+        this.add.text(400, 30, 'SPRING!', { font: 'bold 42px Orbitron', fill: '#333' }).setOrigin(0.5);
+        this.add.text(400, 80, 'SPACE oder Klick zum Springen', { font: '16px Orbitron', fill: '#666' }).setOrigin(0.5);
+
+        // Boden
+        this.add.rectangle(400, 530, 800, 60, 0x8b4513);
+        this.add.rectangle(400, 505, 800, 10, 0x228b22); // Gras
+
+        // Spieler (unsichtbares Physik-Objekt)
+        this.playerY = 450;
+        this.velocityY = 0;
+        this.isOnGround = true;
+        this.gravity = 1500;
+
+        // Zobel zeichnen
+        if (this.textures.exists('zobel')) {
+            this.zobel = this.add.image(150, this.playerY, 'zobel').setScale(0.18);
+        } else {
+            this.zobel = Zobel.draw(this, 150, this.playerY, 0.6, playerData.activeZobelColor === 'rainbow' ? 0x00ff88 : playerData.activeZobelColor);
+        }
+
+        // Hindernisse
+        this.obstacles = [];
+        this.spawnObstacle(); // Erstes Hindernis sofort
+
+        this.obstacleTimer = this.time.addEvent({
+            delay: 1500 / this.gameSpeed,
+            callback: this.spawnObstacle,
+            callbackScope: this,
+            loop: true
+        });
+
+        // Nur 1 Hindernis überspringen
+        this.jumped = 0;
+        this.targetJumps = 1;
+
+        // Steuerung
+        this.input.keyboard.on('keydown-SPACE', () => this.jump());
+        this.input.on('pointerdown', () => this.jump());
+
+        this.startTimer();
+    }
+    spawnObstacle() {
+        if (this.hasEnded) return;
+        const height = Phaser.Math.Between(50, 80);
+        const obstacle = this.add.rectangle(850, 500 - height / 2, 50, height, 0xff6b6b);
+        obstacle.setStrokeStyle(3, 0xaa0000);
+        obstacle.velocityX = -350 * this.gameSpeed;
+        obstacle.passed = false;
+        this.obstacles.push(obstacle);
+    }
+    jump() {
+        if (this.hasEnded) return;
+        if (this.isOnGround) {
+            this.velocityY = -600;
+            this.isOnGround = false;
+        }
+    }
+    update(time, delta) {
+        super.update();
+        if (this.hasEnded) return;
+
+        const dt = delta / 1000;
+
+        // Physik für Spieler
+        this.velocityY += this.gravity * dt;
+        this.playerY += this.velocityY * dt;
+
+        // Boden-Check
+        if (this.playerY >= 450) {
+            this.playerY = 450;
+            this.velocityY = 0;
+            this.isOnGround = true;
+        }
+
+        // Zobel Position updaten
+        this.zobel.y = this.playerY;
+
+        // Hindernisse bewegen und prüfen
+        for (let i = this.obstacles.length - 1; i >= 0; i--) {
+            const obs = this.obstacles[i];
+            obs.x += obs.velocityX * dt;
+
+            if (obs.x < -60) {
+                obs.destroy();
+                this.obstacles.splice(i, 1);
+                continue;
+            }
+
+            // Übersprungen? -> Sofort gewinnen
+            if (!obs.passed && obs.x < 130) {
+                obs.passed = true;
+                this.win();
+                return;
+            }
+
+            // Kollision?
+            const playerBox = new Phaser.Geom.Rectangle(130, this.playerY - 40, 40, 70);
+            if (Phaser.Geom.Intersects.RectangleToRectangle(playerBox, obs.getBounds())) {
+                this.lose();
+                return;
+            }
+        }
+    }
+}
+
+class ZobelCatch extends BaseMicrogame {
+    constructor() { super({ key: 'ZobelCatch' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+        this.add.text(400, 30, 'FANG DIE STERNE!', { font: 'bold 36px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+
+        // Zobel mit Korb
+        if (this.textures.exists('zobel')) {
+            this.zobel = this.add.image(400, 500, 'zobel').setScale(0.18);
+        } else {
+            this.zobel = Zobel.draw(this, 400, 500, 0.6, 0x00ff88);
+        }
+
+        // Fallende Objekte
+        this.items = [];
+        this.caught = 0;
+        this.targetCatch = 1;
+        this.add.text(400, 80, 'Fang einen Stern! Vermeide Bomben!', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Items spawnen
+        this.spawnTimer = this.time.addEvent({
+            delay: 600 / this.gameSpeed,
+            callback: this.spawnItem,
+            callbackScope: this,
+            loop: true
+        });
+
+        this.startTimer();
+    }
+    spawnItem() {
+        if (this.hasEnded) return;
+        const isStar = Phaser.Math.Between(0, 3) > 0; // 75% Sterne, 25% Bomben
+        const x = Phaser.Math.Between(80, 720);
+        const item = this.add.text(x, -30, isStar ? '⭐' : '💣', { font: '40px Arial' }).setOrigin(0.5);
+        this.physics.add.existing(item);
+        item.body.setVelocityY(200 * this.gameSpeed);
+        item.isStar = isStar;
+        this.items.push(item);
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        // Zobel folgt Maus
+        this.zobel.x = Phaser.Math.Clamp(this.input.x, 60, 740);
+
+        // Items prüfen
+        for (let i = this.items.length - 1; i >= 0; i--) {
+            const item = this.items[i];
+            if (item.y > 620) {
+                item.destroy();
+                this.items.splice(i, 1);
+                continue;
+            }
+            // Gefangen?
+            const dist = Phaser.Math.Distance.Between(item.x, item.y, this.zobel.x, this.zobel.y - 20);
+            if (dist < 50) {
+                if (item.isStar) {
+                    this.win();
+                } else {
+                    this.lose();
+                    return;
+                }
+                item.destroy();
+                this.items.splice(i, 1);
+            }
+        }
+    }
+}
+
+class FeedZobel extends BaseMicrogame {
+    constructor() { super({ key: 'FeedZobel' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#f5deb3');
+        this.add.text(400, 30, 'FÜTTERE DAS ZOBEL!', { font: 'bold 36px Orbitron', fill: '#8b4513' }).setOrigin(0.5);
+
+        // Zobel in der Mitte
+        if (this.textures.exists('zobel')) {
+            this.zobel = this.add.image(400, 350, 'zobel').setScale(0.3);
+        } else {
+            this.zobel = Zobel.draw(this, 400, 350, 1.0, 0x00ff88);
+        }
+
+        // Gewünschtes Essen anzeigen
+        const foods = ['🍎', '🍕', '🍔', '🍩', '🥕', '🍇'];
+        this.wantedFood = Phaser.Utils.Array.GetRandom(foods);
+        this.add.text(400, 180, 'Will: ' + this.wantedFood, { font: 'bold 48px Arial' }).setOrigin(0.5);
+
+        // Essens-Buttons
+        const shuffled = Phaser.Utils.Array.Shuffle([...foods]);
+        for (let i = 0; i < 4; i++) {
+            const food = i === 0 ? this.wantedFood : shuffled.filter(f => f !== this.wantedFood)[i - 1];
+            const x = 150 + i * 180;
+            const btn = this.add.text(x, 500, food, { font: '60px Arial' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            btn.on('pointerdown', () => {
+                if (this.hasEnded || this.inputBufferActive) return;
+                if (food === this.wantedFood) {
+                    // Zobel happy Animation
+                    this.tweens.add({ targets: this.zobel, scaleY: 1.2, duration: 100, yoyo: true });
+                    this.win();
+                } else {
+                    this.lose();
+                }
+            });
+            btn.on('pointerover', () => btn.setScale(1.2));
+            btn.on('pointerout', () => btn.setScale(1));
+        }
+
+        this.startTimer();
+    }
+}
+
+class ZobelDance extends BaseMicrogame {
+    constructor() { super({ key: 'ZobelDance' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#4a0080');
+        this.add.text(400, 30, 'TANZ MIT DEM ZOBEL!', { font: 'bold 32px Orbitron', fill: '#ff00ff' }).setOrigin(0.5);
+
+        // Zobel
+        if (this.textures.exists('zobel')) {
+            this.zobel = this.add.image(400, 350, 'zobel').setScale(0.25);
+        } else {
+            this.zobel = Zobel.draw(this, 400, 350, 0.9, 0x00ff88);
+        }
+
+        // Pfeiltasten-Sequenz
+        this.sequence = [];
+        this.playerIndex = 0;
+        const arrows = ['←', '↑', '→', '↓'];
+        const arrowKeys = [37, 38, 39, 40];
+        const seqLength = 4 + Math.floor(this.gameSpeed);
+
+        for (let i = 0; i < seqLength; i++) {
+            const idx = Phaser.Math.Between(0, 3);
+            this.sequence.push({ arrow: arrows[idx], key: arrowKeys[idx] });
+        }
+
+        // Sequenz anzeigen
+        this.arrowText = this.add.text(400, 150, this.sequence.map(s => s.arrow).join(' '), {
+            font: 'bold 48px Orbitron', fill: '#fff'
+        }).setOrigin(0.5);
+
+        this.progressText = this.add.text(400, 220, '', { font: 'bold 36px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+
+        // Disco Lichter
+        this.time.addEvent({
+            delay: 200,
+            callback: () => {
+                if (!this.hasEnded) {
+                    this.cameras.main.setBackgroundColor(Phaser.Display.Color.RandomRGB(100, 200).color);
+                }
+            },
+            loop: true
+        });
+
+        // Zobel tanzt
+        this.tweens.add({ targets: this.zobel, angle: { from: -10, to: 10 }, duration: 200, yoyo: true, repeat: -1 });
+        this.tweens.add({ targets: this.zobel, y: { from: 340, to: 360 }, duration: 150, yoyo: true, repeat: -1 });
+
+        // Input
+        this.input.keyboard.on('keydown', (e) => {
+            if (this.hasEnded || this.inputBufferActive) return;
+            if ([37, 38, 39, 40].includes(e.keyCode)) {
+                if (e.keyCode === this.sequence[this.playerIndex].key) {
+                    this.playerIndex++;
+                    this.progressText.setText('✓'.repeat(this.playerIndex));
+                    if (this.playerIndex >= this.sequence.length) this.win();
+                } else {
+                    this.lose();
+                }
+            }
+        });
+
+        this.startTimer();
+    }
+}
+
+// ======= NEUE CHARAKTER-SPIELE =======
+
+// ZOBEL SPIELE
+
+// ZobelHide - Zobel versteckt sich vor Feinden
+class ZobelHide extends BaseMicrogame {
+    constructor() { super({ key: 'ZobelHide' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#2d5a27');
+
+        // Anleitung
+        this.add.text(400, 560, 'Klicke auf das versteckte Zobel!', { font: '14px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Büsche erstellen
+        this.bushes = [];
+        const positions = [
+            { x: 150, y: 250 }, { x: 350, y: 200 }, { x: 550, y: 280 },
+            { x: 250, y: 400 }, { x: 450, y: 380 }, { x: 650, y: 320 }
+        ];
+
+        // Zobel versteckt sich in einem zufälligen Busch
+        const zobelBushIndex = Phaser.Math.Between(0, positions.length - 1);
+
+        positions.forEach((pos, idx) => {
+            const bush = this.add.container(pos.x, pos.y);
+
+            // Busch zeichnen
+            const bushGraphics = this.add.graphics();
+            bushGraphics.fillStyle(0x228B22, 1);
+            bushGraphics.fillCircle(0, 0, 50);
+            bushGraphics.fillCircle(-30, 10, 35);
+            bushGraphics.fillCircle(30, 10, 35);
+            bushGraphics.fillStyle(0x1a6b1a, 1);
+            bushGraphics.fillCircle(-15, -20, 25);
+            bushGraphics.fillCircle(15, -20, 25);
+            bush.add(bushGraphics);
+
+            // Zobel-Augen die kurz blinken (nur im richtigen Busch)
+            if (idx === zobelBushIndex) {
+                const eyes = this.add.graphics();
+                eyes.fillStyle(0x000000, 1);
+                eyes.fillCircle(-8, -5, 5);
+                eyes.fillCircle(8, -5, 5);
+                bush.add(eyes);
+                eyes.setAlpha(0);
+
+                // Kurz blinken
+                this.time.addEvent({
+                    delay: Phaser.Math.Between(500, 1500),
+                    callback: () => {
+                        if (!this.hasEnded) {
+                            this.tweens.add({
+                                targets: eyes,
+                                alpha: 1,
+                                duration: 150,
+                                yoyo: true,
+                                repeat: 0
+                            });
+                        }
+                    },
+                    loop: true
+                });
+            }
+
+            bush.setInteractive(new Phaser.Geom.Circle(0, 0, 60), Phaser.Geom.Circle.Contains);
+            bush.on('pointerdown', () => {
+                if (this.hasEnded) return;
+                if (idx === zobelBushIndex) {
+                    // Zobel springt raus
+                    bush.removeAll(true);
+                    if (this.textures.exists('zobel')) {
+                        const zobelImg = this.add.image(pos.x, pos.y - 50, 'zobel').setScale(0.15);
+                        this.tweens.add({ targets: zobelImg, y: pos.y - 100, duration: 300 });
+                    } else {
+                        const zobelSprite = Zobel.draw(this, pos.x, pos.y - 50, 0.5);
+                        this.tweens.add({ targets: zobelSprite, y: pos.y - 100, duration: 300 });
+                    }
+                    this.win();
+                } else {
+                    // Falscher Busch - schüttelt
+                    this.tweens.add({
+                        targets: bush,
+                        x: { from: pos.x - 10, to: pos.x + 10 },
+                        duration: 50,
+                        yoyo: true,
+                        repeat: 3
+                    });
+                }
+            });
+
+            this.bushes.push(bush);
+        });
+
+        this.startTimer();
+    }
+}
+
+// ZobelRun - Zobel rennt und sammelt Nüsse
+class ZobelRun extends BaseMicrogame {
+    constructor() { super({ key: 'ZobelRun' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#87CEEB');
+        this.collected = 0;
+        this.target = 3;
+
+        // Boden
+        this.add.rectangle(400, 550, 800, 100, 0x8B4513);
+
+        // Anleitung
+        this.add.text(400, 30, 'Sammle 3 Nüsse! ← →', { font: '18px Orbitron', fill: '#000' }).setOrigin(0.5);
+        this.collectText = this.add.text(400, 60, '0 / 3', { font: 'bold 24px Orbitron', fill: '#8B4513' }).setOrigin(0.5);
+
+        // Zobel erstellen
+        this.zobelX = 400;
+        this.zobelY = 480;
+        if (this.textures.exists('zobel')) {
+            this.zobel = this.add.image(this.zobelX, this.zobelY, 'zobel').setScale(0.15);
+        } else {
+            this.zobel = Zobel.draw(this, this.zobelX, this.zobelY, 0.5);
+        }
+
+        // Nüsse erstellen
+        this.nuts = [];
+        for (let i = 0; i < 5; i++) {
+            const nut = this.add.container(Phaser.Math.Between(80, 720), 480);
+            const nutGraphics = this.add.graphics();
+            nutGraphics.fillStyle(0x8B4513, 1);
+            nutGraphics.fillEllipse(0, 0, 25, 20);
+            nutGraphics.fillStyle(0x654321, 1);
+            nutGraphics.fillEllipse(0, -12, 10, 8);
+            nut.add(nutGraphics);
+            this.nuts.push(nut);
+        }
+
+        // Steuerung
+        this.cursors = this.input.keyboard.createCursorKeys();
+
+        this.startTimer();
+    }
+
+    update() {
+        if (this.hasEnded) return;
+
+        // Zobel bewegen
+        const speed = 8;
+        if (this.cursors.left.isDown) {
+            this.zobelX -= speed;
+            if (this.zobel.setFlipX) this.zobel.setFlipX(true);
+        }
+        if (this.cursors.right.isDown) {
+            this.zobelX += speed;
+            if (this.zobel.setFlipX) this.zobel.setFlipX(false);
+        }
+        this.zobelX = Phaser.Math.Clamp(this.zobelX, 50, 750);
+        this.zobel.x = this.zobelX;
+
+        // Nüsse sammeln
+        this.nuts.forEach((nut, idx) => {
+            if (nut.active && Math.abs(nut.x - this.zobelX) < 40) {
+                nut.setActive(false).setVisible(false);
+                this.collected++;
+                this.collectText.setText(this.collected + ' / ' + this.target);
+                musicEngine.playSFX('click');
+
+                if (this.collected >= this.target) {
+                    this.win();
+                }
+            }
+        });
+    }
+}
+
+// SWAGGY SPIELE (Fisch)
+
+// SwaggySwim - Schwimme durch Ringe
+class SwaggySwim extends BaseMicrogame {
+    constructor() { super({ key: 'SwaggySwim' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#006994');
+        this.ringsCollected = 0;
+        this.target = 3;
+
+        // Wasser-Blasen im Hintergrund
+        for (let i = 0; i < 15; i++) {
+            const bubble = this.add.circle(
+                Phaser.Math.Between(0, 800),
+                Phaser.Math.Between(0, 600),
+                Phaser.Math.Between(5, 15),
+                0x87CEEB, 0.3
+            );
+            this.tweens.add({
+                targets: bubble,
+                y: -20,
+                duration: Phaser.Math.Between(2000, 4000),
+                repeat: -1,
+                delay: Phaser.Math.Between(0, 2000)
+            });
+        }
+
+        // Anleitung
+        this.add.text(400, 30, 'Schwimme durch 3 Ringe! ← ↑ → ↓', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.collectText = this.add.text(400, 60, '0 / 3', { font: 'bold 24px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+
+        // Swaggy erstellen
+        this.swaggyX = 100;
+        this.swaggyY = 300;
+        if (this.textures.exists('swaggy')) {
+            this.swaggy = this.add.image(this.swaggyX, this.swaggyY, 'swaggy').setScale(0.1);
+        } else {
+            // Fallback: Fisch zeichnen
+            this.swaggy = this.add.container(this.swaggyX, this.swaggyY);
+            const fish = this.add.graphics();
+            fish.fillStyle(0xFFA500, 1);
+            fish.fillEllipse(0, 0, 60, 30);
+            fish.fillTriangle(-30, 0, -50, -15, -50, 15);
+            fish.fillStyle(0x000000, 1);
+            fish.fillCircle(15, -5, 5);
+            this.swaggy.add(fish);
+        }
+
+        // Ringe erstellen
+        this.rings = [];
+        for (let i = 0; i < 5; i++) {
+            const ring = this.add.container(250 + i * 130, Phaser.Math.Between(150, 450));
+            const ringGraphics = this.add.graphics();
+            ringGraphics.lineStyle(8, 0xFFD700);
+            ringGraphics.strokeCircle(0, 0, 40);
+            ring.add(ringGraphics);
+            ring.collected = false;
+            this.rings.push(ring);
+        }
+
+        // Steuerung
+        this.cursors = this.input.keyboard.createCursorKeys();
+
+        this.startTimer();
+    }
+
+    update() {
+        if (this.hasEnded) return;
+
+        const speed = 6;
+        if (this.cursors.left.isDown) this.swaggyX -= speed;
+        if (this.cursors.right.isDown) this.swaggyX += speed;
+        if (this.cursors.up.isDown) this.swaggyY -= speed;
+        if (this.cursors.down.isDown) this.swaggyY += speed;
+
+        this.swaggyX = Phaser.Math.Clamp(this.swaggyX, 30, 770);
+        this.swaggyY = Phaser.Math.Clamp(this.swaggyY, 80, 570);
+        this.swaggy.x = this.swaggyX;
+        this.swaggy.y = this.swaggyY;
+
+        // Ringe sammeln
+        this.rings.forEach(ring => {
+            if (!ring.collected && Phaser.Math.Distance.Between(this.swaggyX, this.swaggyY, ring.x, ring.y) < 45) {
+                ring.collected = true;
+                ring.list[0].lineStyle(8, 0x00ff00);
+                ring.list[0].clear();
+                ring.list[0].lineStyle(8, 0x00ff00);
+                ring.list[0].strokeCircle(0, 0, 40);
+                this.ringsCollected++;
+                this.collectText.setText(this.ringsCollected + ' / ' + this.target);
+                musicEngine.playSFX('click');
+
+                if (this.ringsCollected >= this.target) {
+                    this.win();
+                }
+            }
+        });
+    }
+}
+
+// SwaggyBubble - Platze Blasen
+class SwaggyBubble extends BaseMicrogame {
+    constructor() { super({ key: 'SwaggyBubble' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#004466');
+        this.popped = 0;
+        this.target = 5;
+
+        this.add.text(400, 30, 'Platze 5 Blasen! SPACE', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.collectText = this.add.text(400, 60, '0 / 5', { font: 'bold 24px Orbitron', fill: '#87CEEB' }).setOrigin(0.5);
+
+        // Swaggy
+        this.swaggyY = 500;
+        if (this.textures.exists('swaggy')) {
+            this.swaggy = this.add.image(400, this.swaggyY, 'swaggy').setScale(0.1);
+        } else {
+            this.swaggy = this.add.container(400, this.swaggyY);
+            const fish = this.add.graphics();
+            fish.fillStyle(0xFFA500, 1);
+            fish.fillEllipse(0, 0, 50, 25);
+            fish.fillStyle(0x000000, 1);
+            fish.fillCircle(12, -3, 4);
+            this.swaggy.add(fish);
+        }
+
+        // Blasen
+        this.bubbles = [];
+        for (let i = 0; i < 8; i++) {
+            this.spawnBubble();
+        }
+
+        // Space zum Blasen platzen
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (this.hasEnded) return;
+            this.shootBubble();
+        });
+
+        this.startTimer();
+    }
+
+    spawnBubble() {
+        const bubble = this.add.circle(
+            Phaser.Math.Between(100, 700),
+            Phaser.Math.Between(100, 400),
+            Phaser.Math.Between(20, 40),
+            0x87CEEB, 0.7
+        );
+        bubble.active = true;
+        this.bubbles.push(bubble);
+    }
+
+    shootBubble() {
+        // Swaggy schießt Blase nach oben
+        const projectile = this.add.circle(400, this.swaggyY - 30, 10, 0xFFD700);
+        this.tweens.add({
+            targets: projectile,
+            y: 0,
+            duration: 500,
+            onUpdate: () => {
+                this.bubbles.forEach(bubble => {
+                    if (bubble.active && Phaser.Math.Distance.Between(projectile.x, projectile.y, bubble.x, bubble.y) < bubble.radius + 10) {
+                        bubble.active = false;
+                        bubble.destroy();
+                        this.popped++;
+                        this.collectText.setText(this.popped + ' / ' + this.target);
+                        musicEngine.playSFX('click');
+                        if (this.popped >= this.target) this.win();
+                    }
+                });
+            },
+            onComplete: () => projectile.destroy()
+        });
+    }
+}
+
+// SwaggyDance - Tanzen wie Zobel Dance
+class SwaggyDance extends BaseMicrogame {
+    constructor() { super({ key: 'SwaggyDance' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a0050');
+        this.score = 0;
+        this.target = 4;
+
+        // Disco-Lichter
+        for (let i = 0; i < 10; i++) {
+            const light = this.add.circle(Phaser.Math.Between(0, 800), Phaser.Math.Between(0, 600), 100, Phaser.Math.Between(0, 0xFFFFFF), 0.1);
+            this.tweens.add({ targets: light, alpha: 0.3, duration: Phaser.Math.Between(300, 800), yoyo: true, repeat: -1 });
+        }
+
+        this.add.text(400, 50, 'Drücke die Pfeile!', { font: '20px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.scoreText = this.add.text(400, 90, '0 / 4', { font: 'bold 28px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+
+        // Swaggy
+        if (this.textures.exists('swaggy')) {
+            this.swaggy = this.add.image(400, 350, 'swaggy').setScale(0.15);
+        } else {
+            this.swaggy = this.add.container(400, 350);
+            const fish = this.add.graphics();
+            fish.fillStyle(0xFFA500, 1);
+            fish.fillEllipse(0, 0, 70, 35);
+            fish.fillStyle(0x000000, 1);
+            fish.fillCircle(18, -5, 6);
+            this.swaggy.add(fish);
+        }
+
+        // Pfeil-Sequenz
+        this.sequence = [];
+        this.arrowSymbols = { 'LEFT': '←', 'RIGHT': '→', 'UP': '↑', 'DOWN': '↓' };
+        this.arrows = ['LEFT', 'RIGHT', 'UP', 'DOWN'];
+        for (let i = 0; i < this.target; i++) {
+            this.sequence.push(Phaser.Utils.Array.GetRandom(this.arrows));
+        }
+        this.currentIndex = 0;
+
+        // Sequenz anzeigen mit Pfeilsymbolen
+        this.arrowDisplay = this.add.text(400, 200, this.sequence.map(s => this.arrowSymbols[s]).join(' '), {
+            font: 'bold 48px Orbitron', fill: '#ffff00'
+        }).setOrigin(0.5);
+
+        // Steuerung
+        this.input.keyboard.on('keydown', (event) => {
+            if (this.hasEnded) return;
+            const key = event.key.toUpperCase().replace('ARROW', '');
+            if (['LEFT', 'RIGHT', 'UP', 'DOWN'].includes(key)) {
+                if (key === this.sequence[this.currentIndex]) {
+                    this.score++;
+                    this.currentIndex++;
+                    this.scoreText.setText(this.score + ' / ' + this.target);
+
+                    // Swaggy tanzt
+                    const baseScale = this.textures.exists('swaggy') ? 0.15 : 1.0;
+                    this.tweens.add({
+                        targets: this.swaggy,
+                        angle: { from: -15, to: 15 },
+                        scaleX: baseScale * 1.1,
+                        scaleY: baseScale * 1.1,
+                        duration: 100,
+                        yoyo: true
+                    });
+
+                    if (this.score >= this.target) this.win();
+                } else {
+                    this.cameras.main.shake(100, 0.01);
+                }
+            }
+        });
+
+        this.startTimer();
+    }
+}
+
+// SwaggyFish - Fange kleinere Fische
+class SwaggyFish extends BaseMicrogame {
+    constructor() { super({ key: 'SwaggyFish' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#003355');
+        this.caught = 0;
+        this.target = 3;
+
+        this.add.text(400, 30, 'Fange 3 kleine Fische! ← ↑ → ↓', { font: '14px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.collectText = this.add.text(400, 60, '0 / 3', { font: 'bold 24px Orbitron', fill: '#FFA500' }).setOrigin(0.5);
+
+        // Swaggy (großer Fisch)
+        this.swaggyX = 400;
+        this.swaggyY = 300;
+        if (this.textures.exists('swaggy')) {
+            this.swaggy = this.add.image(this.swaggyX, this.swaggyY, 'swaggy').setScale(0.12);
+        } else {
+            this.swaggy = this.add.container(this.swaggyX, this.swaggyY);
+            const fish = this.add.graphics();
+            fish.fillStyle(0xFFA500, 1);
+            fish.fillEllipse(0, 0, 60, 30);
+            fish.fillTriangle(-30, 0, -50, -15, -50, 15);
+            fish.fillStyle(0x000000, 1);
+            fish.fillCircle(15, -5, 5);
+            this.swaggy.add(fish);
+        }
+
+        // Kleine Fische
+        this.smallFish = [];
+        for (let i = 0; i < 8; i++) {
+            const fish = this.add.container(Phaser.Math.Between(50, 750), Phaser.Math.Between(100, 500));
+            const fishG = this.add.graphics();
+            const color = Phaser.Math.Between(0, 0xFFFFFF);
+            fishG.fillStyle(color, 1);
+            fishG.fillEllipse(0, 0, 25, 12);
+            fishG.fillTriangle(-12, 0, -20, -6, -20, 6);
+            fishG.fillStyle(0x000000, 1);
+            fishG.fillCircle(6, -2, 3);
+            fish.add(fishG);
+            fish.active = true;
+            fish.vx = Phaser.Math.Between(-3, 3) || 1;
+            fish.vy = Phaser.Math.Between(-2, 2);
+            this.smallFish.push(fish);
+        }
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+
+    update() {
+        if (this.hasEnded) return;
+
+        const speed = 5;
+        if (this.cursors.left.isDown) this.swaggyX -= speed;
+        if (this.cursors.right.isDown) this.swaggyX += speed;
+        if (this.cursors.up.isDown) this.swaggyY -= speed;
+        if (this.cursors.down.isDown) this.swaggyY += speed;
+
+        this.swaggyX = Phaser.Math.Clamp(this.swaggyX, 40, 760);
+        this.swaggyY = Phaser.Math.Clamp(this.swaggyY, 100, 560);
+        this.swaggy.x = this.swaggyX;
+        this.swaggy.y = this.swaggyY;
+
+        // Kleine Fische bewegen
+        this.smallFish.forEach(fish => {
+            if (!fish.active) return;
+            fish.x += fish.vx;
+            fish.y += fish.vy;
+            if (fish.x < 20 || fish.x > 780) fish.vx *= -1;
+            if (fish.y < 100 || fish.y > 560) fish.vy *= -1;
+
+            // Fangen
+            if (Phaser.Math.Distance.Between(this.swaggyX, this.swaggyY, fish.x, fish.y) < 40) {
+                fish.active = false;
+                fish.setVisible(false);
+                this.caught++;
+                this.collectText.setText(this.caught + ' / ' + this.target);
+                musicEngine.playSFX('click');
+                if (this.caught >= this.target) this.win();
+            }
+        });
+    }
+}
+
+// DUDE SPIELE
+
+// DudeRun - Laufe und weiche Hindernissen aus
+class DudeRun extends BaseMicrogame {
+    constructor() { super({ key: 'DudeRun' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#87CEEB');
+        this.distance = 0;
+        this.targetDistance = 100;
+
+        // Boden
+        this.add.rectangle(400, 550, 800, 100, 0x654321);
+        this.add.rectangle(400, 580, 800, 40, 0x228B22);
+
+        this.add.text(400, 30, 'Laufe nach rechts! →', { font: '18px Orbitron', fill: '#000' }).setOrigin(0.5);
+        this.distanceText = this.add.text(400, 60, '0m', { font: 'bold 24px Orbitron', fill: '#4169E1' }).setOrigin(0.5);
+
+        // Dude
+        this.dudeX = 100;
+        if (this.textures.exists('dude')) {
+            this.dude = this.add.sprite(this.dudeX, 480, 'dude', 4).setScale(3.0);
+        } else {
+            this.dude = this.add.rectangle(this.dudeX, 480, 30, 50, 0x4169E1);
+        }
+
+        // Hindernisse
+        this.obstacles = [];
+        for (let i = 0; i < 3; i++) {
+            const obs = this.add.rectangle(300 + i * 200, 480, 30, 60, 0x8B0000);
+            this.obstacles.push(obs);
+        }
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.isJumping = false;
+        this.dudeVY = 0;
+        this.groundY = 480;
+
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (!this.isJumping && !this.hasEnded) {
+                this.isJumping = true;
+                this.dudeVY = -15;
+                if (this.dude.play) this.dude.play('dude_idle');
+            }
+        });
+
+        this.startTimer();
+    }
+
+    update() {
+        if (this.hasEnded) return;
+
+        // Laufen
+        if (this.cursors.right.isDown) {
+            this.distance += 0.5;
+            this.distanceText.setText(Math.floor(this.distance) + 'm');
+            if (this.dude.play && !this.isJumping) this.dude.play('dude_right', true);
+
+            // Hindernisse bewegen sich relativ zum Spieler
+            this.obstacles.forEach(obs => {
+                obs.x -= 3;
+                if (obs.x < -50) obs.x = 850;
+            });
+
+            if (this.distance >= this.targetDistance) {
+                this.win();
+            }
+        } else if (!this.isJumping && this.dude.play) {
+            this.dude.play('dude_idle', true);
+        }
+
+        // Springen
+        if (this.isJumping) {
+            this.dudeVY += 0.8;
+            this.dude.y += this.dudeVY;
+            if (this.dude.y >= this.groundY) {
+                this.dude.y = this.groundY;
+                this.isJumping = false;
+                this.dudeVY = 0;
+            }
+        }
+
+        // Kollision
+        this.obstacles.forEach(obs => {
+            if (Math.abs(obs.x - this.dudeX) < 30 && this.dude.y > 450) {
+                this.cameras.main.shake(100, 0.02);
+            }
+        });
+    }
+}
+
+// DudeDodge - Weiche fallenden Objekten aus
+class DudeDodge extends BaseMicrogame {
+    constructor() { super({ key: 'DudeDodge' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+        this.surviveTime = 0;
+
+        this.add.rectangle(400, 550, 800, 100, 0x333333);
+        this.add.text(400, 30, 'Weiche den Bomben aus! ← →', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Dude
+        this.dudeX = 400;
+        if (this.textures.exists('dude')) {
+            this.dude = this.add.sprite(this.dudeX, 480, 'dude', 4).setScale(3.0);
+        } else {
+            this.dude = this.add.rectangle(this.dudeX, 480, 30, 50, 0x4169E1);
+        }
+
+        // Bomben
+        this.bombs = [];
+        this.spawnTimer = this.time.addEvent({
+            delay: 400,
+            callback: () => {
+                if (!this.hasEnded) {
+                    const bomb = this.add.circle(Phaser.Math.Between(50, 750), -20, 15, 0xff0000);
+                    bomb.vy = Phaser.Math.Between(4, 8);
+                    this.bombs.push(bomb);
+                }
+            },
+            loop: true
+        });
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+
+    update() {
+        if (this.hasEnded) return;
+
+        const speed = 7;
+        if (this.cursors.left.isDown) {
+            this.dudeX -= speed;
+            if (this.dude.play) this.dude.play('dude_left', true);
+        } else if (this.cursors.right.isDown) {
+            this.dudeX += speed;
+            if (this.dude.play) this.dude.play('dude_right', true);
+        } else if (this.dude.play) {
+            this.dude.play('dude_idle', true);
+        }
+
+        this.dudeX = Phaser.Math.Clamp(this.dudeX, 30, 770);
+        this.dude.x = this.dudeX;
+
+        // Bomben bewegen
+        this.bombs.forEach(bomb => {
+            bomb.y += bomb.vy;
+            if (bomb.y > 600) bomb.destroy();
+
+            // Kollision
+            if (Phaser.Math.Distance.Between(this.dudeX, 480, bomb.x, bomb.y) < 35) {
+                this.lose();
+            }
+        });
+    }
+}
+
+// DudeJump - Spring über Hindernisse
+class DudeJump extends BaseMicrogame {
+    constructor() { super({ key: 'DudeJump' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#4a69bd');
+        this.jumped = 0;
+        this.target = 1;
+
+        this.add.rectangle(400, 550, 800, 100, 0x2d3436);
+        this.add.text(400, 30, 'Spring über das Hindernis! SPACE', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Dude
+        this.dudeY = 480;
+        if (this.textures.exists('dude')) {
+            this.dude = this.add.sprite(200, this.dudeY, 'dude', 4).setScale(3.0);
+        } else {
+            this.dude = this.add.rectangle(200, this.dudeY, 30, 50, 0x4169E1);
+        }
+
+        // Hindernis kommt von rechts
+        this.obstacle = this.add.rectangle(850, 480, 40, 50, 0xff6b6b);
+        this.obstacleSpeed = 6;
+
+        this.isJumping = false;
+        this.dudeVY = 0;
+        this.groundY = 480;
+
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (!this.isJumping && !this.hasEnded) {
+                this.isJumping = true;
+                this.dudeVY = -18;
+            }
+        });
+
+        this.startTimer();
+    }
+
+    update() {
+        if (this.hasEnded) return;
+
+        // Springen
+        if (this.isJumping) {
+            this.dudeVY += 1;
+            this.dudeY += this.dudeVY;
+            this.dude.y = this.dudeY;
+
+            if (this.dudeY >= this.groundY) {
+                this.dudeY = this.groundY;
+                this.dude.y = this.groundY;
+                this.isJumping = false;
+                this.dudeVY = 0;
+            }
+        }
+
+        // Hindernis bewegen
+        this.obstacle.x -= this.obstacleSpeed;
+
+        // Erfolgreich übersprungen
+        if (this.obstacle.x < 150 && this.jumped === 0) {
+            if (this.dudeY < 440) {
+                // In der Luft = übersprungen
+                this.jumped++;
+                this.win();
+            }
+        }
+
+        // Kollision
+        if (this.obstacle.x > 160 && this.obstacle.x < 240 && this.dudeY > 450) {
+            this.lose();
+        }
+
+        // Hindernis durch
+        if (this.obstacle.x < -50) {
+            this.obstacle.x = 850;
+        }
+    }
+}
+
+// BOSS GAMES
+class BossGame extends BaseMicrogame {
+    constructor() { super({ key: 'BossGame' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#000000');
+
+        // Anleitung
+        this.add.text(400, 560, '← → Bewegen | SPACE Schießen', { font: '14px Orbitron', fill: '#888' }).setOrigin(0.5);
+
+        // Spieler
+        this.player = this.add.rectangle(400, 520, 50, 50, 0x00ff88);
+        this.physics.add.existing(this.player);
+        this.player.body.setCollideWorldBounds(true);
+        this.cursors = this.input.keyboard.createCursorKeys();
+
+        // Boss
+        this.boss = this.add.rectangle(400, 100, 100, 80, 0xff0000);
+        this.boss.health = Math.floor(10 * this.gameSpeed);
+        this.bossMaxHealth = this.boss.health;
+        this.tweens.add({
+            targets: this.boss,
+            x: { from: 100, to: 700 },
+            duration: 2000,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1
+        });
+
+        // Health Bar
+        this.healthBar = this.add.graphics();
+        this.updateHealthBar();
+
+        // Bullet Arrays
+        this.playerBullets = [];
+        this.bossBullets = [];
+
+        // Input
+        this.input.keyboard.on('keydown-SPACE', () => this.shoot());
+        this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
+
+        // Boss schießt regelmäßig
+        this.time.addEvent({
+            delay: 1200 / this.gameSpeed,
+            callback: this.bossShoot,
+            callbackScope: this,
+            loop: true
+        });
+    }
+    updateHealthBar() {
+        this.healthBar.clear();
+        this.healthBar.fillStyle(0x333333);
+        this.healthBar.fillRect(200, 20, 400, 20);
+        this.healthBar.fillStyle(0xff0000);
+        this.healthBar.fillRect(200, 20, 400 * (this.boss.health / this.bossMaxHealth), 20);
+    }
+    shoot() {
+        if (this.hasEnded) return;
+        const bullet = this.add.rectangle(this.player.x, this.player.y - 30, 8, 24, 0x00ffff);
+        this.physics.add.existing(bullet);
+        bullet.body.setVelocityY(-500);
+        this.playerBullets.push(bullet);
+    }
+    bossShoot() {
+        if (this.hasEnded) return;
+        const bullet = this.add.circle(this.boss.x, this.boss.y + 50, 12, 0xff00ff);
+        this.physics.add.existing(bullet);
+        // Richtung zum Spieler berechnen
+        const angle = Phaser.Math.Angle.Between(this.boss.x, this.boss.y, this.player.x, this.player.y);
+        const speed = 250 * this.gameSpeed;
+        bullet.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        this.bossBullets.push(bullet);
+    }
+    hitBoss(bullet) {
+        bullet.destroy();
+        this.boss.health--;
+        this.updateHealthBar();
+        this.cameras.main.shake(50, 0.01);
+        if (this.boss.health <= 0) this.win();
+    }
+    win() {
+        if (this.hasEnded) return;
+        this.hasEnded = true;
+        this.cameras.main.flash(400, 255, 215, 0);
+        musicEngine.playSFX('win');
+        if (this.parentScene) { this.parentScene.bossWon(); this.scene.stop(); }
+    }
+    lose() {
+        if (this.hasEnded) return;
+        this.hasEnded = true;
+        this.cameras.main.shake(200, 0.02);
+        this.cameras.main.flash(150, 255, 0, 0);
+        musicEngine.playSFX('lose');
+        if (this.parentScene) { this.parentScene.microgameLost('BossGame'); this.scene.stop(); }
+    }
+    update() {
+        if (this.hasEnded) return;
+
+        // Spieler Bewegung
+        this.player.body.setVelocityX(0);
+        if (this.cursors.left.isDown) this.player.body.setVelocityX(-400);
+        else if (this.cursors.right.isDown) this.player.body.setVelocityX(400);
+
+        // Spieler-Bullets prüfen
+        for (let i = this.playerBullets.length - 1; i >= 0; i--) {
+            const b = this.playerBullets[i];
+            if (!b.active) { this.playerBullets.splice(i, 1); continue; }
+            if (b.y < 0) { b.destroy(); this.playerBullets.splice(i, 1); continue; }
+            // Kollision mit Boss
+            if (Phaser.Geom.Intersects.RectangleToRectangle(b.getBounds(), this.boss.getBounds())) {
+                this.hitBoss(b);
+                this.playerBullets.splice(i, 1);
+            }
+        }
+
+        // Boss-Bullets prüfen
+        for (let i = this.bossBullets.length - 1; i >= 0; i--) {
+            const b = this.bossBullets[i];
+            if (!b.active) { this.bossBullets.splice(i, 1); continue; }
+            if (b.y > 600 || b.x < 0 || b.x > 800) { b.destroy(); this.bossBullets.splice(i, 1); continue; }
+            // Kollision mit Spieler
+            const dist = Phaser.Math.Distance.Between(b.x, b.y, this.player.x, this.player.y);
+            if (dist < 35) {
+                this.lose();
+            }
+        }
+    }
+    exitToMenu() { this.hasEnded = true; musicEngine.stopMusic(); this.scene.stop(); if (this.parentScene) this.parentScene.scene.stop(); this.scene.start('StartScreen'); }
+}
+
+class BoxingBoss extends BaseMicrogame {
+    constructor() { super({ key: 'BoxingBoss' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a0a0a');
+
+        this.add.text(400, 30, 'BOXING BOSS!', { font: 'bold 34px Orbitron', fill: '#ff0000' }).setOrigin(0.5);
+        this.add.text(400, 550, 'Klicke auf Boss - NICHT bei BLOCK!', { font: '14px Orbitron', fill: '#888' }).setOrigin(0.5);
+
+        // Handschuh-Cursor
+        this.glove = this.add.circle(0, 0, 20, 0xff0000).setDepth(10);
+        this.glove.setStrokeStyle(3, 0xffffff);
+        this.input.on('pointermove', (p) => { this.glove.x = p.x; this.glove.y = p.y; });
+
+        // Boss
+        this.boss = this.add.rectangle(400, 300, 180, 180, 0x8b0000);
+        this.boss.setStrokeStyle(4, 0xffffff);
+        this.bossMaxHealth = Math.floor(12 * this.gameSpeed);
+        this.boss.health = this.bossMaxHealth;
+        this.boss.isBlocking = false;
+
+        // Health Bar
+        this.healthBar = this.add.graphics();
+        this.updateHealthBar();
+
+        // Block Text
+        this.blockText = this.add.text(400, 300, 'BLOCK!', { font: 'bold 64px Orbitron', fill: '#ffff00' }).setOrigin(0.5).setVisible(false).setDepth(11);
+
+        // Boss blockt regelmäßig
+        this.time.addEvent({
+            delay: 2500 / this.gameSpeed,
+            callback: this.bossAction,
+            callbackScope: this,
+            loop: true
+        });
+
+        this.input.on('pointerdown', this.punch, this);
+        this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
+    }
+    updateHealthBar() {
+        this.healthBar.clear();
+        this.healthBar.fillStyle(0x333333);
+        this.healthBar.fillRect(200, 70, 400, 20);
+        this.healthBar.fillStyle(0xff0000);
+        this.healthBar.fillRect(200, 70, 400 * (this.boss.health / this.bossMaxHealth), 20);
+    }
+    bossAction() {
+        if (this.hasEnded || this.boss.isBlocking) return;
+
+        let count = 3;
+        const countText = this.add.text(400, 150, '3', { font: 'bold 56px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+
+        this.time.addEvent({
+            delay: 400 / this.gameSpeed,
+            callback: () => {
+                count--;
+                if (count > 0) {
+                    countText.setText(count.toString());
+                } else {
+                    countText.destroy();
+                    this.boss.isBlocking = true;
+                    this.boss.setFillStyle(0xaaaaaa);
+                    this.blockText.setVisible(true);
+                    this.time.delayedCall(800 / this.gameSpeed, () => {
+                        this.boss.isBlocking = false;
+                        this.boss.setFillStyle(0x8b0000);
+                        this.blockText.setVisible(false);
+                    });
+                }
+            },
+            repeat: 2
+        });
+    }
+    punch(pointer) {
+        if (this.hasEnded) return;
+        if (Phaser.Geom.Rectangle.Contains(this.boss.getBounds(), pointer.x, pointer.y)) {
+            if (this.boss.isBlocking) {
+                this.lose();
+            } else {
+                this.boss.health--;
+                this.updateHealthBar();
+                this.cameras.main.shake(50, 0.01);
+                // Treffer-Effekt
+                this.boss.setFillStyle(0xff4444);
+                this.time.delayedCall(100, () => {
+                    if (!this.boss.isBlocking) this.boss.setFillStyle(0x8b0000);
+                });
+                if (this.boss.health <= 0) this.win();
+            }
+        }
+    }
+    win() {
+        if (this.hasEnded) return;
+        this.hasEnded = true;
+        this.cameras.main.flash(400, 255, 215, 0);
+        musicEngine.playSFX('win');
+        if (this.parentScene) { this.parentScene.bossWon(); this.scene.stop(); }
+    }
+    lose() {
+        if (this.hasEnded) return;
+        this.hasEnded = true;
+        this.cameras.main.shake(200, 0.02);
+        this.cameras.main.flash(150, 255, 0, 0);
+        musicEngine.playSFX('lose');
+        if (this.parentScene) { this.parentScene.microgameLost('BoxingBoss'); this.scene.stop(); }
+    }
+    exitToMenu() { this.hasEnded = true; musicEngine.stopMusic(); this.scene.stop(); if (this.parentScene) this.parentScene.scene.stop(); this.scene.start('StartScreen'); }
+}
+
+// Swaggy Boss - Unterwasser-Boss-Kampf
+class SwaggyBoss extends BaseMicrogame {
+    constructor() { super({ key: 'SwaggyBoss' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#001a33');
+
+        // Unterwasser-Effekt
+        for (let i = 0; i < 20; i++) {
+            const bubble = this.add.circle(
+                Phaser.Math.Between(0, 800),
+                Phaser.Math.Between(0, 600),
+                Phaser.Math.Between(3, 10),
+                0x87CEEB, 0.2
+            );
+            this.tweens.add({
+                targets: bubble,
+                y: -20,
+                duration: Phaser.Math.Between(3000, 6000),
+                repeat: -1
+            });
+        }
+
+        this.add.text(400, 30, 'SWAGGY BOSS!', { font: 'bold 34px Orbitron', fill: '#FFA500' }).setOrigin(0.5);
+        this.add.text(400, 560, '← ↑ → ↓ Bewegen | SPACE Schießen', { font: '14px Orbitron', fill: '#888' }).setOrigin(0.5);
+
+        // Swaggy (Spieler)
+        this.swaggyX = 100;
+        this.swaggyY = 300;
+        if (this.textures.exists('swaggy')) {
+            this.swaggy = this.add.image(this.swaggyX, this.swaggyY, 'swaggy').setScale(0.1);
+        } else {
+            this.swaggy = this.add.container(this.swaggyX, this.swaggyY);
+            const fish = this.add.graphics();
+            fish.fillStyle(0xFFA500, 1);
+            fish.fillEllipse(0, 0, 50, 25);
+            fish.fillTriangle(-25, 0, -40, -12, -40, 12);
+            fish.fillStyle(0x000000, 1);
+            fish.fillCircle(12, -3, 4);
+            this.swaggy.add(fish);
+        }
+
+        // Boss - Großer Hai
+        this.boss = this.add.container(600, 300);
+        const sharkBody = this.add.graphics();
+        sharkBody.fillStyle(0x4a4a4a, 1);
+        sharkBody.fillEllipse(0, 0, 150, 60);
+        sharkBody.fillTriangle(-75, 0, -110, -30, -110, 30);
+        sharkBody.fillTriangle(0, -30, -20, -60, 20, -30);
+        sharkBody.fillStyle(0xffffff, 1);
+        sharkBody.fillEllipse(40, 5, 30, 20);
+        sharkBody.fillStyle(0x000000, 1);
+        sharkBody.fillCircle(50, 5, 8);
+        // Zähne
+        sharkBody.fillStyle(0xffffff, 1);
+        for (let i = 0; i < 5; i++) {
+            sharkBody.fillTriangle(60 + i * 8, 15, 64 + i * 8, 25, 68 + i * 8, 15);
+        }
+        this.boss.add(sharkBody);
+
+        this.bossMaxHealth = Math.floor(8 * this.gameSpeed);
+        this.bossHealth = this.bossMaxHealth;
+        this.bossVX = 2;
+        this.bossVY = 1.5;
+
+        // Health Bar
+        this.healthBar = this.add.graphics();
+        this.updateHealthBar();
+
+        // Projektile
+        this.playerBullets = [];
+        this.bossBullets = [];
+
+        // Boss schießt
+        this.time.addEvent({
+            delay: 1500 / this.gameSpeed,
+            callback: () => {
+                if (this.hasEnded) return;
+                const bullet = this.add.circle(this.boss.x - 80, this.boss.y, 8, 0xff0000);
+                bullet.vx = -6;
+                bullet.vy = (this.swaggyY - this.boss.y) * 0.02;
+                this.bossBullets.push(bullet);
+            },
+            loop: true
+        });
+
+        // Steuerung
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (this.hasEnded) return;
+            const bullet = this.add.circle(this.swaggyX + 30, this.swaggyY, 6, 0x00ff00);
+            bullet.vx = 8;
+            this.playerBullets.push(bullet);
+        });
+
+        this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
+    }
+
+    updateHealthBar() {
+        this.healthBar.clear();
+        this.healthBar.fillStyle(0x333333);
+        this.healthBar.fillRect(200, 70, 400, 20);
+        this.healthBar.fillStyle(0xff6600);
+        this.healthBar.fillRect(200, 70, 400 * (this.bossHealth / this.bossMaxHealth), 20);
+    }
+
+    update() {
+        if (this.hasEnded) return;
+
+        // Swaggy bewegen
+        const speed = 5;
+        if (this.cursors.left.isDown) this.swaggyX -= speed;
+        if (this.cursors.right.isDown) this.swaggyX += speed;
+        if (this.cursors.up.isDown) this.swaggyY -= speed;
+        if (this.cursors.down.isDown) this.swaggyY += speed;
+
+        this.swaggyX = Phaser.Math.Clamp(this.swaggyX, 30, 350);
+        this.swaggyY = Phaser.Math.Clamp(this.swaggyY, 100, 520);
+        this.swaggy.x = this.swaggyX;
+        this.swaggy.y = this.swaggyY;
+
+        // Boss bewegen
+        this.boss.x += this.bossVX;
+        this.boss.y += this.bossVY;
+        if (this.boss.x < 450 || this.boss.x > 720) this.bossVX *= -1;
+        if (this.boss.y < 150 || this.boss.y > 450) this.bossVY *= -1;
+
+        // Spieler-Projektile
+        this.playerBullets.forEach((bullet, idx) => {
+            bullet.x += bullet.vx;
+            if (bullet.x > 800) {
+                bullet.destroy();
+                this.playerBullets.splice(idx, 1);
+            } else if (Phaser.Math.Distance.Between(bullet.x, bullet.y, this.boss.x, this.boss.y) < 80) {
+                bullet.destroy();
+                this.playerBullets.splice(idx, 1);
+                this.bossHealth--;
+                this.updateHealthBar();
+                this.cameras.main.shake(50, 0.005);
+                if (this.bossHealth <= 0) this.win();
+            }
+        });
+
+        // Boss-Projektile
+        this.bossBullets.forEach((bullet, idx) => {
+            bullet.x += bullet.vx;
+            bullet.y += bullet.vy;
+            if (bullet.x < 0) {
+                bullet.destroy();
+                this.bossBullets.splice(idx, 1);
+            } else if (Phaser.Math.Distance.Between(bullet.x, bullet.y, this.swaggyX, this.swaggyY) < 25) {
+                this.lose();
+            }
+        });
+    }
+
+    win() {
+        if (this.hasEnded) return;
+        this.hasEnded = true;
+        this.cameras.main.flash(400, 255, 165, 0);
+        musicEngine.playSFX('win');
+        if (this.parentScene) { this.parentScene.bossWon(); this.scene.stop(); }
+    }
+
+    lose() {
+        if (this.hasEnded) return;
+        this.hasEnded = true;
+        this.cameras.main.shake(200, 0.02);
+        this.cameras.main.flash(150, 255, 0, 0);
+        musicEngine.playSFX('lose');
+        if (this.parentScene) { this.parentScene.microgameLost('SwaggyBoss'); this.scene.stop(); }
+    }
+
+    exitToMenu() {
+        this.hasEnded = true;
+        musicEngine.stopMusic();
+        this.scene.stop();
+        if (this.parentScene) this.parentScene.scene.stop();
+        this.scene.start('StartScreen');
+    }
+}
+
+// SCENES
+
+// Boot Scene - lädt alle Bilder
+class BootScene extends Phaser.Scene {
+    constructor() { super({ key: 'BootScene' }); }
+    preload() {
+        // Lade-Anzeige
+        const loadingText = this.add.text(400, 280, 'LADEN...', { font: 'bold 32px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+        const progressBar = this.add.rectangle(400, 340, 0, 30, 0x00ff88);
+        const statusText = this.add.text(400, 400, '', { font: '14px Orbitron', fill: '#888' }).setOrigin(0.5);
+
+        this.load.on('progress', (value) => {
+            progressBar.width = 300 * value;
+        });
+
+        // Fehlerbehandlung
+        this.load.on('loaderror', (file) => {
+            console.error('Fehler beim Laden:', file.key, file.src);
+            statusText.setText('Fehler: ' + file.key);
+        });
+
+        this.load.on('filecomplete', (key) => {
+            console.log('Geladen:', key);
+            statusText.setText('Geladen: ' + key);
+        });
+
+        // Charakter-Bilder laden
+        this.load.image('zobel', 'Zobel.png');
+        this.load.image('swaggy', 'swaggy.png');
+        // Dude ist ein Spritesheet: 9 Frames (288x48 = 32x48 pro Frame)
+        this.load.spritesheet('dude', 'dude.png', { frameWidth: 32, frameHeight: 48 });
+    }
+    create() {
+        // Debug: Zeige geladene Texturen
+        console.log('Zobel geladen:', this.textures.exists('zobel'));
+        console.log('Swaggy geladen:', this.textures.exists('swaggy'));
+        console.log('Dude geladen:', this.textures.exists('dude'));
+
+        // Dude-Animationen erstellen (nur wenn geladen)
+        if (this.textures.exists('dude')) {
+            if (!this.anims.exists('dude_left')) {
+                this.anims.create({
+                    key: 'dude_left',
+                    frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+            }
+            if (!this.anims.exists('dude_idle')) {
+                this.anims.create({
+                    key: 'dude_idle',
+                    frames: [{ key: 'dude', frame: 4 }],
+                    frameRate: 1
+                });
+            }
+            if (!this.anims.exists('dude_right')) {
+                this.anims.create({
+                    key: 'dude_right',
+                    frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+            }
+        }
+        this.scene.start('StartScreen');
+    }
+}
+
+class StartScreen extends Phaser.Scene {
+    constructor() { super({ key: 'StartScreen' }); }
+    create() {
+        this.cameras.main.setBackgroundColor('#0a0a1a');
+
+        // Debug: Zeige ob Bilder geladen wurden
+        const zobelLoaded = this.textures.exists('zobel');
+        const swaggyLoaded = this.textures.exists('swaggy');
+        const dudeLoaded = this.textures.exists('dude');
+        console.log('StartScreen - Bilder geladen:', { zobel: zobelLoaded, swaggy: swaggyLoaded, dude: dudeLoaded });
+
+        // Warnung wenn Bilder nicht geladen (nur bei file://)
+        if (!zobelLoaded || !swaggyLoaded || !dudeLoaded) {
+            const isFileProtocol = window.location.protocol === 'file:';
+            this.add.rectangle(400, 560, 750, 60, 0x330000, 0.9);
+            if (isFileProtocol) {
+                this.add.text(400, 545, 'Bilder nicht geladen! Lade auf GitHub Pages hoch oder starte lokal:', { font: '11px Orbitron', fill: '#ff6666' }).setOrigin(0.5);
+                this.add.text(400, 565, 'GitHub: Repo erstellen → Settings → Pages → Deploy', { font: '10px Orbitron', fill: '#ffaa00' }).setOrigin(0.5);
+                this.add.text(400, 580, 'Lokal: python3 -m http.server 8000', { font: '10px Orbitron', fill: '#88ff88' }).setOrigin(0.5);
+            } else {
+                this.add.text(400, 555, 'Bilder nicht gefunden! Prüfe ob Zobel.png, swaggy.png, dude.png', { font: '11px Orbitron', fill: '#ff6666' }).setOrigin(0.5);
+                this.add.text(400, 575, 'im gleichen Ordner wie die HTML-Datei liegen.', { font: '11px Orbitron', fill: '#ffaa00' }).setOrigin(0.5);
+            }
+        }
+
+        // Sterne im Hintergrund
+        for (let i = 0; i < 50; i++) {
+            const star = this.add.circle(Phaser.Math.Between(0, 800), Phaser.Math.Between(0, 600), Phaser.Math.Between(1, 3), 0x00ff88, 0.5);
+            this.tweens.add({ targets: star, alpha: { from: 0.2, to: 1 }, duration: Phaser.Math.Between(500, 2000), yoyo: true, repeat: -1 });
+        }
+
+        // Titel
+        const title = this.add.text(400, 100, 'ZOBELWARE', { font: 'bold 72px Orbitron', fill: '#00ff88', stroke: '#00ff88', strokeThickness: 2 }).setOrigin(0.5);
+        this.add.text(400, 103, 'ZOBELWARE', { font: 'bold 72px Orbitron', fill: '#00aa55' }).setOrigin(0.5).setAlpha(0.5);
+        this.tweens.add({ targets: title, scaleX: 1.02, scaleY: 1.02, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.add.text(400, 160, 'v2.0 - WarioWare Style!', { font: '16px Orbitron', fill: '#888' }).setOrigin(0.5);
+
+        // Alle 3 Charaktere anzeigen
+        const characters = [
+            { key: 'zobel', x: 200, scale: 0.2, name: 'Zobel' },
+            { key: 'swaggy', x: 400, scale: 0.1, name: 'Swaggy' },
+            { key: 'dude', x: 600, scale: 3.0, name: 'Dude' }
+        ];
+
+        characters.forEach((char, idx) => {
+            let sprite;
+            if (char.key === 'dude' && this.textures.exists('dude')) {
+                sprite = this.add.sprite(char.x, 260, 'dude', 4).setScale(char.scale);
+                // Dude idle animation
+                this.time.addEvent({
+                    delay: 500 + idx * 200,
+                    callback: () => {
+                        if (sprite.anims) {
+                            const anims = ['dude_left', 'dude_idle', 'dude_right', 'dude_idle'];
+                            let animIdx = 0;
+                            this.time.addEvent({
+                                delay: 800,
+                                callback: () => {
+                                    sprite.play(anims[animIdx % anims.length]);
+                                    animIdx++;
+                                },
+                                loop: true
+                            });
+                        }
+                    },
+                    loop: false
+                });
+            } else if (this.textures.exists(char.key)) {
+                sprite = this.add.image(char.x, 260, char.key).setScale(char.scale);
+            } else {
+                // Fallback auf gezeichnetes Zobel
+                sprite = Zobel.draw(this, char.x, 260, 0.7);
+            }
+
+            // Schwebeeffekt
+            this.tweens.add({
+                targets: sprite,
+                y: 250,
+                duration: 1200 + idx * 200,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+
+            // Charakter-Name
+            this.add.text(char.x, 310, char.name, {
+                font: 'bold 14px Orbitron', fill: '#ffffff'
+            }).setOrigin(0.5);
+        });
+
+        // Highscore
+        this.add.text(400, 370, 'Highscore: ' + playerData.highScore + ' | 💰 ' + playerData.coins, { font: '16px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+
+        // Buttons - 3 nebeneinander
+        const buttons = [
+            { text: 'SPIELEN', x: 200, y: 440, color: 0x00ff88, action: () => this.scene.start('GameScene') },
+            { text: 'ALBUM', x: 400, y: 440, color: 0x00d4ff, action: () => this.scene.start('AlbumScene') },
+            { text: 'SHOP', x: 600, y: 440, color: 0xffff00, action: () => this.scene.start('ShopScene') }
+        ];
+        buttons.forEach(btn => {
+            const rect = this.add.rectangle(btn.x, btn.y, 160, 50, btn.color).setInteractive({ useHandCursor: true });
+            rect.setStrokeStyle(3, 0xffffff);
+            this.add.text(btn.x, btn.y, btn.text, { font: 'bold 20px Orbitron', fill: '#000' }).setOrigin(0.5);
+            rect.on('pointerover', () => rect.setScale(1.08));
+            rect.on('pointerout', () => rect.setScale(1));
+            rect.on('pointerdown', () => { musicEngine.initialize(); musicEngine.playSFX('click'); btn.action(); });
+        });
+
+        // Toggle Buttons
+        this.createToggle(700, 30, '🎵', () => musicEngine.toggleMusic(), musicEngine.musicEnabled);
+        this.createToggle(750, 30, '🔊', () => musicEngine.toggleSFX(), musicEngine.sfxEnabled);
+
+        this.add.text(400, 520, 'ESC = Zurück zum Menü (jederzeit)', { font: '13px Orbitron', fill: '#555' }).setOrigin(0.5);
+    }
+    createToggle(x, y, emoji, toggleFunc, initialState) {
+        const bg = this.add.rectangle(x, y, 40, 40, initialState ? 0x00ff88 : 0x444444).setInteractive({ useHandCursor: true });
+        this.add.text(x, y, emoji, { font: '18px Arial' }).setOrigin(0.5);
+        bg.on('pointerdown', () => { const newState = toggleFunc(); bg.setFillStyle(newState ? 0x00ff88 : 0x444444); });
+    }
+}
+
+class AlbumScene extends Phaser.Scene {
+    constructor() { super({ key: 'AlbumScene' }); }
+    create() {
+        this.cameras.main.setBackgroundColor('#0a0a1a');
+        this.add.text(400, 40, '🎮 MINISPIEL ALBUM 🎮', { font: 'bold 32px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+        this.add.text(400, 80, 'Klicke auf ein Spiel zum Üben • ESC = Zurück', { font: '14px Orbitron', fill: '#666' }).setOrigin(0.5);
+        const games = [
+            // Basis Spiele
+            { key: 'ClickTheButton', name: 'Klick!', color: 0x00ff88 }, { key: 'DodgeTheBall', name: 'Ausweichen', color: 0xff6b6b },
+            { key: 'MashTheKey', name: 'Hämmern', color: 0x7e22ce }, { key: 'StopTheBar', name: 'Stoppen', color: 0x00ff88 },
+            { key: 'CatchTheGem', name: 'Fangen', color: 0xff6b6b }, { key: 'DragToTarget', name: 'Ziehen', color: 0x00d4ff },
+            { key: 'TypeTheWord', name: 'Tippen', color: 0xffe66d }, { key: 'ConnectTheLovers', name: 'Verbinden', color: 0xff6b6b },
+            { key: 'PumpTheBalloon', name: 'Pumpen', color: 0xff6b6b }, { key: 'Safecracker', name: 'Tresor', color: 0x4a69bd },
+            { key: 'MatchTheShape', name: 'Formen', color: 0x8e44ad }, { key: 'HitTheTarget', name: 'Treffen', color: 0x00ff88 },
+            { key: 'TargetClick', name: 'Zielklick', color: 0x8e44ad }, { key: 'MathQuiz', name: 'Mathe', color: 0x28a745 },
+            { key: 'MemoryClick', name: 'Memory', color: 0x9b59b6 }, { key: 'ColorMatch', name: 'Farben', color: 0xe74c3c },
+            { key: 'DontPress', name: 'Nicht drücken', color: 0xff0000 }, { key: 'StopWatch', name: 'Stoppuhr', color: 0x00ff88 },
+            { key: 'SpotTheOdd', name: 'Unterschied', color: 0x00d4ff }, { key: 'BalanceStick', name: 'Balance', color: 0x00ff88 },
+            { key: 'FastClicker', name: 'Schnellklick', color: 0x7e22ce },
+            // Zobel Spiele
+            { key: 'ZobelFrogger', name: 'Zobel Frogger', color: 0x8B7355 }, { key: 'ZobelJump', name: 'Zobel Jump', color: 0x8B7355 },
+            { key: 'ZobelCatch', name: 'Zobel Catch', color: 0x8B7355 }, { key: 'FeedZobel', name: 'Füttern', color: 0x8B7355 },
+            { key: 'ZobelDance', name: 'Zobel Dance', color: 0x8B7355 }, { key: 'ZobelHide', name: 'Zobel Hide', color: 0x8B7355 },
+            { key: 'ZobelRun', name: 'Zobel Run', color: 0x8B7355 },
+            // Swaggy Spiele
+            { key: 'SwaggySwim', name: 'Swaggy Swim', color: 0xFFA500 }, { key: 'SwaggyBubble', name: 'Swaggy Bubble', color: 0xFFA500 },
+            { key: 'SwaggyDance', name: 'Swaggy Dance', color: 0xFFA500 }, { key: 'SwaggyFish', name: 'Swaggy Fish', color: 0xFFA500 },
+            // Dude Spiele
+            { key: 'DudeRun', name: 'Dude Run', color: 0x4169E1 }, { key: 'DudeDodge', name: 'Dude Dodge', color: 0x4169E1 },
+            { key: 'DudeJump', name: 'Dude Jump', color: 0x4169E1 }
+        ];
+        this.allGames = games; this.currentPage = 0; this.itemsPerPage = 12; this.totalPages = Math.ceil(games.length / this.itemsPerPage);
+        this.cardsContainer = this.add.container(0, 0);
+        this.drawPage(); this.drawNavigation();
+        const backBtn = this.add.rectangle(400, 560, 180, 45, 0xff6b6b).setInteractive({ useHandCursor: true }); backBtn.setStrokeStyle(2, 0xffffff); this.add.text(400, 560, '← MENÜ', { font: 'bold 18px Orbitron', fill: '#fff' }).setOrigin(0.5); backBtn.on('pointerdown', () => this.scene.start('StartScreen')); backBtn.on('pointerover', () => backBtn.setFillStyle(0xff4444)); backBtn.on('pointerout', () => backBtn.setFillStyle(0xff6b6b));
+        this.input.keyboard.on('keydown-ESC', () => this.scene.start('StartScreen'));
+    }
+    drawPage() {
+        this.cardsContainer.removeAll(true);
+        const startIdx = this.currentPage * this.itemsPerPage;
+        const pageGames = this.allGames.slice(startIdx, startIdx + this.itemsPerPage);
+        const cols = 4, cardW = 170, cardH = 95, startX = 85, startY = 120, gapX = 12, gapY = 12;
+        pageGames.forEach((game, idx) => {
+            const col = idx % cols, row = Math.floor(idx / cols);
+            const x = startX + col * (cardW + gapX), y = startY + row * (cardH + gapY);
+            const stats = playerData.gameStats[game.key] || { played: 0, won: 0 };
+            const winRate = stats.played > 0 ? Math.round((stats.won / stats.played) * 100) : 0;
+            const card = this.add.rectangle(x + cardW / 2, y + cardH / 2, cardW, cardH, game.color, 0.15);
+            card.setStrokeStyle(2, game.color); card.setInteractive({ useHandCursor: true }); this.cardsContainer.add(card);
+            const nameText = this.add.text(x + cardW / 2, y + 22, game.name, { font: 'bold 14px Orbitron', fill: '#fff' }).setOrigin(0.5); this.cardsContainer.add(nameText);
+            this.cardsContainer.add(this.add.text(x + cardW / 2, y + 45, 'Gespielt: ' + stats.played + 'x', { font: '11px Orbitron', fill: '#aaa' }).setOrigin(0.5));
+            const winColor = winRate >= 60 ? '#00ff88' : winRate >= 30 ? '#ffaa00' : '#ff6b6b';
+            this.cardsContainer.add(this.add.text(x + cardW / 2, y + 65, 'Win: ' + winRate + '%', { font: 'bold 12px Orbitron', fill: winColor }).setOrigin(0.5));
+            card.on('pointerover', () => { card.setFillStyle(game.color, 0.4); nameText.setScale(1.1); });
+            card.on('pointerout', () => { card.setFillStyle(game.color, 0.15); nameText.setScale(1); });
+            card.on('pointerdown', () => { musicEngine.initialize(); this.scene.start(game.key, { parentScene: null, gameSpeed: 1.0, duration: 4000, practiceMode: true }); });
+        });
+        if (this.pageText) this.pageText.destroy();
+        this.pageText = this.add.text(400, 500, 'Seite ' + (this.currentPage + 1) + ' / ' + this.totalPages, { font: '14px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+    }
+    drawNavigation() {
+        if (this.leftArrow) this.leftArrow.destroy(); if (this.rightArrow) this.rightArrow.destroy();
+        const leftEnabled = this.currentPage > 0;
+        this.leftArrow = this.add.text(80, 500, '◀', { font: 'bold 36px Orbitron', fill: leftEnabled ? '#00ff88' : '#333' }).setOrigin(0.5);
+        if (leftEnabled) { this.leftArrow.setInteractive({ useHandCursor: true }); this.leftArrow.on('pointerdown', () => { this.currentPage--; this.drawPage(); this.drawNavigation(); }); }
+        const rightEnabled = this.currentPage < this.totalPages - 1;
+        this.rightArrow = this.add.text(720, 500, '▶', { font: 'bold 36px Orbitron', fill: rightEnabled ? '#00ff88' : '#333' }).setOrigin(0.5);
+        if (rightEnabled) { this.rightArrow.setInteractive({ useHandCursor: true }); this.rightArrow.on('pointerdown', () => { this.currentPage++; this.drawPage(); this.drawNavigation(); }); }
+    }
+}
+
+class ShopScene extends Phaser.Scene {
+    constructor() { super({ key: 'ShopScene' }); }
+    init(data) {
+        this.currentCategory = data.category || 'color';
+    }
+    create() {
+        this.cameras.main.setBackgroundColor('#1a0a2e');
+
+        // Titel
+        this.add.text(400, 40, '🛒 ZOBEL SHOP 🛒', { font: 'bold 36px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+
+        // Münzen anzeigen
+        this.coinsText = this.add.text(400, 85, '💰 ' + playerData.coins + ' Münzen', { font: 'bold 20px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+
+        // Shop Items
+        this.shopItems = [
+            // Zobel Farben
+            { id: 'color_blue', name: 'Blaues Zobel', price: 100, type: 'color', value: 0x00d4ff, preview: '🔵' },
+            { id: 'color_red', name: 'Rotes Zobel', price: 100, type: 'color', value: 0xff6b6b, preview: '🔴' },
+            { id: 'color_gold', name: 'Goldenes Zobel', price: 250, type: 'color', value: 0xffd700, preview: '🟡' },
+            { id: 'color_purple', name: 'Lila Zobel', price: 150, type: 'color', value: 0x9b59b6, preview: '🟣' },
+            { id: 'color_rainbow', name: 'Regenbogen Zobel', price: 500, type: 'color', value: 'rainbow', preview: '🌈' },
+            // Hintergründe
+            { id: 'bg_stars', name: 'Sternenhimmel', price: 200, type: 'background', value: 'stars', preview: '⭐' },
+            { id: 'bg_matrix', name: 'Matrix Regen', price: 300, type: 'background', value: 'matrix', preview: '💚' },
+            { id: 'bg_fire', name: 'Feuer', price: 250, type: 'background', value: 'fire', preview: '🔥' },
+            // Partikel
+            { id: 'particles_sparkle', name: 'Glitzer', price: 150, type: 'particles', value: 'sparkle', preview: '✨' },
+            { id: 'particles_hearts', name: 'Herzen', price: 200, type: 'particles', value: 'hearts', preview: '💕' },
+            { id: 'particles_coins', name: 'Münzregen', price: 350, type: 'particles', value: 'coins', preview: '🪙' },
+        ];
+
+        // Kategorien Buttons
+        this.createCategoryButtons();
+
+        // Items Container
+        this.itemsContainer = this.add.container(0, 0);
+        this.drawItems();
+
+        // Vorschau Zobel
+        let previewColor = playerData.activeZobelColor;
+        if (previewColor === 'rainbow') previewColor = 0x00ff88;
+        this.previewZobel = Zobel.draw(this, 650, 450, 0.7, previewColor);
+        this.add.text(650, 530, 'Vorschau', { font: '14px Orbitron', fill: '#888' }).setOrigin(0.5);
+
+        // Zurück Button
+        const backBtn = this.add.rectangle(400, 560, 180, 45, 0xff6b6b).setInteractive({ useHandCursor: true });
+        backBtn.setStrokeStyle(2, 0xffffff);
+        this.add.text(400, 560, '← MENÜ', { font: 'bold 18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        backBtn.on('pointerdown', () => this.scene.start('StartScreen'));
+        backBtn.on('pointerover', () => backBtn.setFillStyle(0xff4444));
+        backBtn.on('pointerout', () => backBtn.setFillStyle(0xff6b6b));
+
+        this.input.keyboard.on('keydown-ESC', () => this.scene.start('StartScreen'));
+    }
+    createCategoryButtons() {
+        const categories = [
+            { id: 'color', name: '🎨 Farben', x: 120 },
+            { id: 'background', name: '🖼️ Hintergründe', x: 300 },
+            { id: 'particles', name: '✨ Effekte', x: 480 }
+        ];
+        this.categoryButtons = [];
+        categories.forEach(cat => {
+            const isActive = this.currentCategory === cat.id;
+            const btn = this.add.rectangle(cat.x, 130, 150, 35, isActive ? 0x00ff88 : 0x333333)
+                .setInteractive({ useHandCursor: true });
+            btn.setStrokeStyle(2, 0x00ff88);
+            const txt = this.add.text(cat.x, 130, cat.name, { font: '14px Orbitron', fill: isActive ? '#000' : '#fff' }).setOrigin(0.5);
+            btn.on('pointerdown', () => {
+                this.scene.restart({ category: cat.id });
+            });
+            btn.on('pointerover', () => { if (!isActive) btn.setFillStyle(0x555555); });
+            btn.on('pointerout', () => { if (!isActive) btn.setFillStyle(0x333333); });
+            this.categoryButtons.push({ btn, txt, cat });
+        });
+    }
+    drawItems() {
+        this.itemsContainer.removeAll(true);
+        const filteredItems = this.shopItems.filter(item => item.type === this.currentCategory);
+
+        const cols = 3, cardW = 180, cardH = 100, startX = 50, startY = 180, gapX = 20, gapY = 15;
+
+        filteredItems.forEach((item, idx) => {
+            const col = idx % cols, row = Math.floor(idx / cols);
+            const x = startX + col * (cardW + gapX), y = startY + row * (cardH + gapY);
+            const owned = playerData.ownsItem(item.id);
+            const isActive = this.isItemActive(item);
+
+            // Karte
+            const cardColor = owned ? (isActive ? 0x00ff88 : 0x444444) : 0x222222;
+            const card = this.add.rectangle(x + cardW / 2, y + cardH / 2, cardW, cardH, cardColor, 0.8);
+            card.setStrokeStyle(2, owned ? 0x00ff88 : 0x666666);
+            card.setInteractive({ useHandCursor: true });
+            this.itemsContainer.add(card);
+
+            // Preview Emoji
+            this.itemsContainer.add(this.add.text(x + 30, y + cardH / 2, item.preview, { font: '32px Arial' }).setOrigin(0.5));
+
+            // Name
+            this.itemsContainer.add(this.add.text(x + cardW / 2 + 20, y + 25, item.name, { font: 'bold 12px Orbitron', fill: '#fff' }).setOrigin(0.5));
+
+            // Status / Preis
+            let statusText, statusColor;
+            if (owned) {
+                statusText = isActive ? '✓ AKTIV' : 'Aktivieren';
+                statusColor = isActive ? '#00ff88' : '#00d4ff';
+            } else {
+                statusText = '💰 ' + item.price;
+                statusColor = playerData.coins >= item.price ? '#ffff00' : '#ff6b6b';
+            }
+            this.itemsContainer.add(this.add.text(x + cardW / 2 + 20, y + 55, statusText, { font: 'bold 14px Orbitron', fill: statusColor }).setOrigin(0.5));
+
+            // Klick Handler
+            card.on('pointerdown', () => this.handleItemClick(item));
+            card.on('pointerover', () => {
+                card.setFillStyle(0x555555, 0.9);
+                this.updatePreview(item);
+            });
+            card.on('pointerout', () => card.setFillStyle(cardColor, 0.8));
+        });
+    }
+    isItemActive(item) {
+        if (item.type === 'color') return playerData.activeZobelColor === item.value;
+        if (item.type === 'background') return playerData.activeBackground === item.value;
+        if (item.type === 'particles') return playerData.activeParticles === item.value;
+        return false;
+    }
+    handleItemClick(item) {
+        if (playerData.ownsItem(item.id)) {
+            // Aktivieren
+            if (item.type === 'color') playerData.setZobelColor(item.value);
+            else if (item.type === 'background') playerData.setBackground(item.value);
+            else if (item.type === 'particles') playerData.setParticles(item.value);
+            musicEngine.playSFX('click');
+            this.scene.restart({ category: this.currentCategory });
+        } else {
+            // Kaufen
+            if (playerData.spendCoins(item.price)) {
+                playerData.buyItem(item.id);
+                musicEngine.playSFX('win');
+                this.scene.restart({ category: this.currentCategory });
+            } else {
+                // Nicht genug Münzen - zeige Feedback
+                musicEngine.playSFX('lose');
+                this.cameras.main.shake(100, 0.01);
+                const noMoney = this.add.text(400, 300, 'Nicht genug Münzen!', {
+                    font: 'bold 24px Orbitron', fill: '#ff0000', backgroundColor: '#000000aa', padding: { x: 20, y: 10 }
+                }).setOrigin(0.5).setDepth(100);
+                this.time.delayedCall(1000, () => noMoney.destroy());
+            }
+        }
+    }
+    updatePreview(item) {
+        if (this.previewZobel) this.previewZobel.destroy();
+        let color = item.type === 'color' ? item.value : playerData.activeZobelColor;
+        if (color === 'rainbow') color = Phaser.Display.Color.RandomRGB().color;
+        this.previewZobel = Zobel.draw(this, 650, 450, 0.7, color);
+    }
+}
+
+class GameScene extends Phaser.Scene {
+    constructor() { super({ key: 'GameScene' }); }
+    create() {
+        this.cameras.main.setBackgroundColor('#0a0a1a');
+        this.score = 0; this.lives = 3; this.gameSpeed = 1.0; this.gamesPlayed = 0; this.winStreak = 0; this.lossStreak = 0;
+
+        // Charakter zurücksetzen auf ersten Charakter
+        CharacterManager.setCharacter('zobel');
+
+        // UI Elemente
+        this.scoreText = this.add.text(16, 16, 'Score: 0', { font: 'bold 28px Orbitron', fill: '#00ff88' });
+        this.livesText = this.add.text(620, 16, 'Leben: 3', { font: 'bold 28px Orbitron', fill: '#ff6b6b' });
+        this.speedText = this.add.text(300, 16, 'x1.0', { font: 'bold 22px Orbitron', fill: '#00d4ff' });
+        this.coinsText = this.add.text(16, 50, '💰 ' + playerData.coins, { font: 'bold 20px Orbitron', fill: '#ffff00' });
+
+        // Charakter-Anzeige oben rechts
+        const char = CharacterManager.getCurrentCharacter();
+        this.charText = this.add.text(760, 50, char.name, { font: 'bold 16px Orbitron', fill: '#' + char.color.toString(16).padStart(6, '0') }).setOrigin(1, 0);
+
+        this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
+        musicEngine.initialize();
+        this.showTransition();
+    }
+    showTransition() {
+        if (this.lives <= 0) { this.gameOver(); return; }
+        if (this.gamesPlayed > 0 && this.gamesPlayed % 10 === 0) { this.showBossTransition(); return; }
+
+        musicEngine.stopMusic();
+        const transitionDuration = Math.max(800, 1600 / this.gameSpeed);
+
+        // Hintergrund verdunkeln
+        const char = CharacterManager.getCurrentCharacter();
+        const bgColor = Phaser.Display.Color.IntegerToColor(char.color).darken(70).color;
+        const bg = this.add.rectangle(400, 300, 800, 600, bgColor, 0.95).setDepth(100);
+
+        // Rundenzahl
+        const roundNum = this.gamesPlayed + 1;
+        const roundText = this.add.text(400, 100, roundNum.toString(), {
+            font: 'bold 120px Orbitron', fill: '#' + char.color.toString(16).padStart(6, '0'), stroke: '#ffffff', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(101);
+
+        // Charakter-Name anzeigen
+        const charName = this.add.text(400, 180, char.name.toUpperCase(), {
+            font: 'bold 28px Orbitron', fill: '#ffffff'
+        }).setOrigin(0.5).setDepth(101);
+
+        // Aktuellen Charakter zeichnen (mit Bild wenn vorhanden)
+        let charSprite;
+        if (char.image === 'dude' && this.textures.exists('dude')) {
+            charSprite = this.add.sprite(400, 380, 'dude', 4).setScale(char.scale * 2).setDepth(101);
+        } else if (this.textures.exists(char.image)) {
+            charSprite = this.add.image(400, 380, char.image).setScale(char.scale * 1.5).setDepth(101);
+        } else {
+            charSprite = Zobel.draw(this, 400, 380, 0.8, char.color);
+            charSprite.setDepth(101);
+        }
+
+        // Zufällige Animation auswählen
+        const animationType = Phaser.Math.Between(0, 5);
+        const animSpeed = Math.max(150, 300 / this.gameSpeed);
+
+        switch(animationType) {
+            case 0: // Hin und her springen
+                this.tweens.add({
+                    targets: charSprite, x: { from: 150, to: 650 }, y: { from: 380, to: 320 },
+                    duration: animSpeed, ease: 'Quad.easeOut', yoyo: true,
+                    repeat: Math.floor(transitionDuration / (animSpeed * 2))
+                });
+                if (char.image === 'dude' && charSprite.play) {
+                    charSprite.play('dude_right');
+                    this.time.addEvent({ delay: animSpeed, callback: () => charSprite.play && charSprite.play('dude_left'), loop: true });
+                }
+                break;
+            case 1: // Drehen und hüpfen
+                this.tweens.add({
+                    targets: charSprite, y: { from: 380, to: 280 },
+                    duration: animSpeed, ease: 'Bounce.easeOut', yoyo: true,
+                    repeat: Math.floor(transitionDuration / (animSpeed * 2))
+                });
+                if (char.image !== 'dude') {
+                    this.tweens.add({ targets: charSprite, angle: 360, duration: animSpeed * 2, repeat: -1 });
+                }
+                break;
+            case 2: // Wackeln
+                this.tweens.add({
+                    targets: charSprite, scaleX: { from: char.scale * 1.2, to: char.scale * 1.8 }, scaleY: { from: char.scale * 1.8, to: char.scale * 1.2 },
+                    duration: animSpeed / 2, yoyo: true, repeat: -1
+                });
+                this.tweens.add({ targets: charSprite, x: { from: 380, to: 420 }, duration: animSpeed / 3, yoyo: true, repeat: -1 });
+                break;
+            case 3: // Rennen von links nach rechts
+                charSprite.x = -50;
+                this.tweens.add({
+                    targets: charSprite, x: { from: -50, to: 850 },
+                    duration: transitionDuration * 0.8, ease: 'Linear', repeat: 0
+                });
+                if (char.image === 'dude' && charSprite.play) charSprite.play('dude_right');
+                this.tweens.add({ targets: charSprite, y: { from: 380, to: 350 }, duration: 100, yoyo: true, repeat: -1 });
+                break;
+            case 4: // Tanzen (Seitwärts-Bewegung)
+                this.tweens.add({
+                    targets: charSprite, x: { from: 300, to: 500 },
+                    duration: animSpeed, ease: 'Sine.easeInOut', yoyo: true, repeat: -1
+                });
+                this.tweens.add({ targets: charSprite, scaleY: { from: char.scale * 1.2, to: char.scale * 1.8 }, duration: animSpeed / 2, yoyo: true, repeat: -1 });
+                break;
+            case 5: // Zoom-Puls
+                this.tweens.add({
+                    targets: charSprite, scaleX: { from: char.scale, to: char.scale * 2 }, scaleY: { from: char.scale, to: char.scale * 2 },
+                    duration: animSpeed, ease: 'Bounce.easeOut', yoyo: true, repeat: -1
+                });
+                break;
+        }
+
+        // Charakter-spezifischen Jingle abspielen
+        CharacterManager.playJingle(this.gameSpeed);
+
+        // Rundenzahl Animation
+        this.tweens.add({
+            targets: roundText,
+            scaleX: 1.3, scaleY: 1.3,
+            duration: transitionDuration / 2,
+            yoyo: true,
+            ease: 'Bounce.easeOut'
+        });
+
+        // Partikel/Sterne im Hintergrund mit Charakter-Farbe
+        for (let i = 0; i < 8; i++) {
+            const star = this.add.text(
+                Phaser.Math.Between(50, 750), Phaser.Math.Between(50, 550),
+                '★', { font: 'bold 24px Arial', fill: '#' + char.color.toString(16).padStart(6, '0') }
+            ).setOrigin(0.5).setDepth(100).setAlpha(0);
+            this.tweens.add({
+                targets: star, alpha: 1, scale: { from: 0.5, to: 1.5 },
+                duration: 300, delay: i * 100, yoyo: true,
+                onComplete: () => star.destroy()
+            });
+        }
+
+        // Nach Transition zum Spiel
+        this.time.delayedCall(transitionDuration, () => {
+            bg.destroy();
+            roundText.destroy();
+            charName.destroy();
+            charSprite.destroy();
+            this.startNextGame();
+        });
+    }
+    showBossTransition() {
+        musicEngine.stopMusic();
+        const char = CharacterManager.getCurrentCharacter();
+        const boss = CharacterManager.getBoss();
+
+        const bg = this.add.rectangle(400, 300, 800, 600, 0x1a0000, 0.95).setDepth(100);
+
+        // Warnung blinkt
+        const warningText = this.add.text(400, 60, '⚠ WARNING ⚠', {
+            font: 'bold 36px Orbitron', fill: '#ffff00'
+        }).setOrigin(0.5).setDepth(101);
+        this.tweens.add({ targets: warningText, alpha: 0, duration: 200, yoyo: true, repeat: -1 });
+
+        // Boss-Name anzeigen
+        const bossText = this.add.text(400, 180, boss.name, {
+            font: 'bold 70px Orbitron', fill: '#ff0000', stroke: '#ffff00', strokeThickness: 6
+        }).setOrigin(0.5).setDepth(101);
+
+        // Charakter-Name
+        const charNameText = this.add.text(400, 120, char.name + ' vs', {
+            font: 'bold 24px Orbitron', fill: '#ffffff'
+        }).setOrigin(0.5).setDepth(101);
+
+        // Aktuellen Charakter zeichnen
+        let charSprite;
+        if (char.image === 'dude' && this.textures.exists('dude')) {
+            charSprite = this.add.sprite(400, 400, 'dude', 4).setScale(char.scale * 2).setDepth(101);
+        } else if (this.textures.exists(char.image)) {
+            charSprite = this.add.image(400, 400, char.image).setScale(char.scale * 1.5).setDepth(101);
+        } else {
+            charSprite = Zobel.draw(this, 400, 400, 0.9, 0xff6666);
+            charSprite.setDepth(101);
+        }
+
+        // Boss Jingle
+        musicEngine.playBossJingle();
+
+        // Zoom Animation - rein und raus
+        let zoomCount = 0;
+        const zoomIn = () => {
+            this.tweens.add({
+                targets: this.cameras.main,
+                zoom: 1.3,
+                duration: 200,
+                ease: 'Quad.easeIn',
+                onComplete: () => {
+                    this.tweens.add({
+                        targets: this.cameras.main,
+                        zoom: 1.0,
+                        duration: 200,
+                        ease: 'Quad.easeOut',
+                        onComplete: () => {
+                            zoomCount++;
+                            if (zoomCount < 3) {
+                                this.time.delayedCall(100, zoomIn);
+                            }
+                        }
+                    });
+                }
+            });
+        };
+        zoomIn();
+
+        // Charakter zittert
+        this.tweens.add({ targets: charSprite, x: { from: 390, to: 410 }, duration: 50, yoyo: true, repeat: -1 });
+        this.tweens.add({ targets: charSprite, scaleY: { from: char.scale * 1.3, to: char.scale * 1.5 }, duration: 100, yoyo: true, repeat: -1 });
+
+        // Boss Text pulst
+        this.tweens.add({
+            targets: bossText,
+            scaleX: 1.4, scaleY: 1.4,
+            duration: 300,
+            yoyo: true,
+            repeat: 3,
+            ease: 'Bounce.easeInOut'
+        });
+
+        this.time.delayedCall(2000, () => {
+            bg.destroy();
+            bossText.destroy();
+            warningText.destroy();
+            charNameText.destroy();
+            charSprite.destroy();
+            this.startBoss();
+        });
+    }
+    startNextGame() {
+        const char = CharacterManager.getCurrentCharacter();
+        let game;
+
+        if (this.lossStreak >= 3) {
+            // Bei Pechsträhne einfaches Spiel aus der Charakter-Liste
+            const easyKeys = ['ClickTheButton', 'MashTheKey', 'TargetClick', 'FastClicker'];
+            const easyGame = char.games.find(g => easyKeys.includes(g.key));
+            game = easyGame || CharacterManager.getRandomGame();
+            this.lossStreak = 0;
+        } else {
+            game = CharacterManager.getRandomGame();
+        }
+        this.currentGame = game;
+
+        // Container für Anzeige
+        const container = this.add.container(400, 300).setDepth(50);
+
+        // Spielname mit Charakter-Farbe
+        const nameText = this.add.text(0, -60, game.name, {
+            font: 'bold 56px Orbitron', fill: '#fff', stroke: '#' + char.color.toString(16).padStart(6, '0'), strokeThickness: 3
+        }).setOrigin(0.5);
+        container.add(nameText);
+
+        // Tasten-Hinweis
+        const keysText = this.add.text(0, 20, game.keys, {
+            font: 'bold 36px Orbitron', fill: '#ffff00', backgroundColor: '#000000cc', padding: { x: 20, y: 10 }
+        }).setOrigin(0.5);
+        container.add(keysText);
+
+        // Animation
+        container.setScale(0);
+        this.tweens.add({
+            targets: container,
+            scaleX: 1, scaleY: 1,
+            duration: 200 / this.gameSpeed,
+            ease: 'Back.easeOut'
+        });
+
+        const showDuration = Math.max(600, 1000 / this.gameSpeed);
+        this.time.delayedCall(showDuration, () => {
+            container.destroy();
+            // Musik starten mit passendem Style
+            musicEngine.setBPM(140 + (this.gameSpeed - 1) * 50);
+            musicEngine.startMusic(game.music);
+            this.scene.launch(game.key, { parentScene: this, gameSpeed: this.gameSpeed, duration: game.duration });
+        });
+    }
+    startBoss() {
+        const boss = CharacterManager.getBoss();
+        this.currentGame = boss;
+
+        // Boss Musik
+        musicEngine.setBPM(160 + (this.gameSpeed - 1) * 40);
+        musicEngine.startMusic('boss');
+
+        this.scene.launch(boss.key, { parentScene: this, gameSpeed: this.gameSpeed });
+    }
+    microgameWon(gameKey) {
+        musicEngine.stopMusic();
+        this.score++; this.gamesPlayed++; this.winStreak++; this.lossStreak = 0;
+        playerData.trackGame(gameKey, true); playerData.addCoins(10);
+        this.scoreText.setText('Score: ' + this.score); this.coinsText.setText('💰 ' + playerData.coins);
+        const comment = this.add.text(400, 120, Zobel.getWin(), { font: 'bold 28px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+        this.time.delayedCall(600, () => comment.destroy());
+
+        let speedUpDelay = 0;
+        if (this.winStreak % 5 === 0) {
+            this.gameSpeed += 0.08; this.speedText.setText('x' + this.gameSpeed.toFixed(1));
+            musicEngine.playSFX('speedup');
+            const speedText = this.add.text(400, 300, 'SPEED UP!', { font: 'bold 48px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5);
+            const zobelComment = this.add.text(400, 360, Zobel.getSpeedUp(), { font: 'bold 24px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+            this.tweens.add({ targets: [speedText, zobelComment], y: '-=100', alpha: 0, duration: 800, onComplete: () => { speedText.destroy(); zobelComment.destroy(); } });
+            speedUpDelay = 800;
+        }
+
+        this.time.delayedCall(500 + speedUpDelay, () => this.showTransition());
+    }
+
+    showCharacterSwitch(oldChar, newChar) {
+        const bg = this.add.rectangle(400, 300, 800, 600, 0x000033, 0.95).setDepth(100);
+
+        const titleText = this.add.text(400, 80, 'CHARAKTER WECHSEL!', {
+            font: 'bold 36px Orbitron', fill: '#00ff88'
+        }).setOrigin(0.5).setDepth(101);
+
+        // Alten Charakter links zeigen
+        let oldSprite;
+        if (oldChar.image === 'dude' && this.textures.exists('dude')) {
+            oldSprite = this.add.sprite(200, 300, 'dude', 4).setScale(oldChar.scale * 1.5).setDepth(101);
+        } else if (this.textures.exists(oldChar.image)) {
+            oldSprite = this.add.image(200, 300, oldChar.image).setScale(oldChar.scale).setDepth(101);
+        } else {
+            oldSprite = Zobel.draw(this, 200, 300, 0.6, oldChar.color);
+            oldSprite.setDepth(101);
+        }
+        this.add.text(200, 400, oldChar.name, { font: 'bold 20px Orbitron', fill: '#888888' }).setOrigin(0.5).setDepth(101);
+
+        // Pfeil
+        const arrow = this.add.text(400, 300, '→', {
+            font: 'bold 80px Orbitron', fill: '#ffff00'
+        }).setOrigin(0.5).setDepth(101);
+        this.tweens.add({ targets: arrow, x: { from: 380, to: 420 }, duration: 300, yoyo: true, repeat: -1 });
+
+        // Neuen Charakter rechts zeigen
+        let newSprite;
+        if (newChar.image === 'dude' && this.textures.exists('dude')) {
+            newSprite = this.add.sprite(600, 300, 'dude', 4).setScale(newChar.scale * 1.5).setDepth(101);
+            newSprite.play('dude_idle');
+        } else if (this.textures.exists(newChar.image)) {
+            newSprite = this.add.image(600, 300, newChar.image).setScale(newChar.scale).setDepth(101);
+        } else {
+            newSprite = Zobel.draw(this, 600, 300, 0.6, newChar.color);
+            newSprite.setDepth(101);
+        }
+        const newNameText = this.add.text(600, 400, newChar.name + '!', {
+            font: 'bold 24px Orbitron', fill: '#' + newChar.color.toString(16).padStart(6, '0')
+        }).setOrigin(0.5).setDepth(101);
+
+        // Neuer Charakter Animation
+        this.tweens.add({
+            targets: newSprite,
+            scaleX: newChar.scale * 2, scaleY: newChar.scale * 2,
+            duration: 400,
+            yoyo: true,
+            repeat: 2,
+            ease: 'Bounce.easeOut'
+        });
+
+        // Jingle des neuen Charakters
+        CharacterManager.playJingle(1.0);
+
+        this.time.delayedCall(2500, () => {
+            bg.destroy();
+            titleText.destroy();
+            oldSprite.destroy();
+            arrow.destroy();
+            newSprite.destroy();
+            newNameText.destroy();
+            this.showTransition();
+        });
+    }
+    microgameLost(gameKey) {
+        musicEngine.stopMusic();
+        this.lives--; this.gamesPlayed++; this.winStreak = 0; this.lossStreak++;
+        playerData.trackGame(gameKey, false);
+        this.livesText.setText('Leben: ' + this.lives);
+        const comment = this.add.text(400, 120, Zobel.getLose(), { font: 'bold 28px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5);
+        this.time.delayedCall(600, () => comment.destroy());
+        if (this.lives > 0) { this.time.delayedCall(500, () => this.showTransition()); }
+        else { this.time.delayedCall(500, () => this.gameOver()); }
+    }
+    bossWon() {
+        musicEngine.stopMusic();
+        this.score += 3; this.gamesPlayed++; this.lives = Math.min(this.lives + 1, 5); this.gameSpeed += 0.1;
+        this.scoreText.setText('Score: ' + this.score); this.livesText.setText('Leben: ' + this.lives); this.speedText.setText('x' + this.gameSpeed.toFixed(1));
+
+        const oldChar = CharacterManager.getCurrentCharacter();
+
+        // Sieges-Animation
+        const bossWinText = this.add.text(400, 250, 'BOSS BESIEGT!', { font: 'bold 56px Orbitron', fill: '#ffd700', stroke: '#ff6600', strokeThickness: 4 }).setOrigin(0.5);
+        const bonusText = this.add.text(400, 330, '+1 LEBEN!', { font: 'bold 32px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+
+        musicEngine.playSFX('win');
+
+        this.tweens.add({
+            targets: [bossWinText, bonusText],
+            scaleX: 1.2, scaleY: 1.2,
+            duration: 300,
+            yoyo: true,
+            repeat: 2
+        });
+
+        this.time.delayedCall(1500, () => {
+            bossWinText.destroy();
+            bonusText.destroy();
+
+            // Nach Boss: Charakter wechseln
+            const newChar = CharacterManager.nextCharacter();
+            this.charText.setText(newChar.name);
+            this.charText.setFill('#' + newChar.color.toString(16).padStart(6, '0'));
+            this.showCharacterSwitch(oldChar, newChar);
+        });
+    }
+    gameOver() { musicEngine.stopMusic(); playerData.updateHighScore(this.score); this.scene.start('GameOverScene', { score: this.score }); }
+    exitToMenu() { musicEngine.stopMusic(); this.scene.stop(); this.scene.start('StartScreen'); }
+}
+
+class GameOverScene extends Phaser.Scene {
+    constructor() { super({ key: 'GameOverScene' }); }
+    init(data) { this.finalScore = data.score || 0; }
+    create() {
+        this.cameras.main.setBackgroundColor('#0a0a0a');
+        this.add.text(400, 150, 'GAME OVER', { font: 'bold 64px Orbitron', fill: '#ff0000' }).setOrigin(0.5);
+        this.add.text(400, 230, 'Score: ' + this.finalScore, { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+        this.add.text(400, 290, 'Highscore: ' + playerData.highScore, { font: '24px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+        this.add.text(400, 330, 'Coins: ' + playerData.coins, { font: '20px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
+        const buttons = [{ text: 'NOCHMAL', y: 420, color: 0x00ff88, action: () => this.scene.start('GameScene') }, { text: 'ALBUM', y: 480, color: 0x00d4ff, action: () => this.scene.start('AlbumScene') }, { text: 'MENÜ', y: 540, color: 0xff6b6b, action: () => this.scene.start('StartScreen') }];
+        buttons.forEach(btn => { const rect = this.add.rectangle(400, btn.y, 180, 45, btn.color).setInteractive({ useHandCursor: true }); rect.setStrokeStyle(2, 0xffffff); this.add.text(400, btn.y, btn.text, { font: 'bold 20px Orbitron', fill: '#000' }).setOrigin(0.5); rect.on('pointerover', () => rect.setScale(1.05)); rect.on('pointerout', () => rect.setScale(1)); rect.on('pointerdown', () => { musicEngine.playSFX('click'); btn.action(); }); });
+        this.input.keyboard.on('keydown-ESC', () => this.scene.start('StartScreen'));
+    }
+}
+
+// CONFIG
+const config = {
+    type: Phaser.AUTO, width: 800, height: 600,
+    physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+    scene: [BootScene, StartScreen, GameScene, GameOverScene, AlbumScene, ShopScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, DudeRun, DudeDodge, DudeJump, BossGame, BoxingBoss, SwaggyBoss]
+};
+const game = new Phaser.Game(config);
+</script>
+</body>
+</html>
