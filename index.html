@@ -256,26 +256,31 @@ class PlayerDataManager {
                 this.coins = d.coins || 0;
                 this.highScore = d.highScore || 0;
                 this.gameStats = d.gameStats || {};
-                this.ownedItems = d.ownedItems || ['default'];
+                this.ownedItems = d.ownedItems || ['default', 'startscreen_default', 'transition_brown'];
                 this.activeZobelColor = d.activeZobelColor || 0x00ff88;
                 this.activeBackground = d.activeBackground || 'default';
                 this.activeParticles = d.activeParticles || 'none';
+                this.startScreenStyle = d.startScreenStyle || 'default';
+                this.transitionColor = d.transitionColor || 0x8B7355;
             } else { this.reset(); }
         } catch (e) { this.reset(); }
     }
     reset() {
         this.coins = 0; this.highScore = 0; this.gameStats = {};
-        this.ownedItems = ['default'];
+        this.ownedItems = ['default', 'startscreen_default', 'transition_brown'];
         this.activeZobelColor = 0x00ff88;
         this.activeBackground = 'default';
         this.activeParticles = 'none';
+        this.startScreenStyle = 'default';
+        this.transitionColor = 0x8B7355;
     }
     saveData() {
         try {
             localStorage.setItem('zobelware_v2', JSON.stringify({
                 coins: this.coins, highScore: this.highScore, gameStats: this.gameStats,
                 ownedItems: this.ownedItems, activeZobelColor: this.activeZobelColor,
-                activeBackground: this.activeBackground, activeParticles: this.activeParticles
+                activeBackground: this.activeBackground, activeParticles: this.activeParticles,
+                startScreenStyle: this.startScreenStyle, transitionColor: this.transitionColor
             }));
         } catch (e) {}
     }
@@ -1041,10 +1046,13 @@ class FeedZobel extends BaseMicrogame {
         this.wantedFood = Phaser.Utils.Array.GetRandom(foods);
         this.add.text(400, 180, 'Will: ' + this.wantedFood, { font: 'bold 48px Arial' }).setOrigin(0.5);
 
-        // Essens-Buttons
-        const shuffled = Phaser.Utils.Array.Shuffle([...foods]);
+        // Essens-Buttons - richtige Position ist zufällig!
+        const wrongFoods = foods.filter(f => f !== this.wantedFood);
+        const shuffledWrong = Phaser.Utils.Array.Shuffle([...wrongFoods]).slice(0, 3);
+        const buttonFoods = Phaser.Utils.Array.Shuffle([this.wantedFood, ...shuffledWrong]);
+
         for (let i = 0; i < 4; i++) {
-            const food = i === 0 ? this.wantedFood : shuffled.filter(f => f !== this.wantedFood)[i - 1];
+            const food = buttonFoods[i];
             const x = 150 + i * 180;
             const btn = this.add.text(x, 500, food, { font: '60px Arial' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
             btn.on('pointerdown', () => {
@@ -3390,108 +3398,101 @@ class StartScreen extends Phaser.Scene {
             });
         }
 
-        // Alle 5 Charaktere anzeigen
-        const characters = [
-            { key: 'zobel', x: 80, scale: 0.15, name: 'Zobel', y: 260 },
-            { key: 'swaggy', x: 240, scale: 0.08, name: 'Swaggy', y: 260 },
-            { key: 'dude', x: 400, scale: 2.5, name: 'Trashi', y: 220 },
-            { key: 'kaeppchen', x: 560, scale: 1.2, name: 'Käppchen', y: 240 },
-            { key: 'edgar', x: 720, scale: 2.0, name: 'Edgar', y: 260 }
-        ];
+        // Charakter-Anzeige je nach gewähltem Stil
+        if (playerData.startScreenStyle === 'individual') {
+            // INDIVIDUAL STYLE: Einzelne Charaktere fliegen aus Explosion
+            const characters = [
+                { key: 'zobel', x: 80, scale: 0.15, name: 'Zobel', y: 260 },
+                { key: 'swaggy', x: 240, scale: 0.08, name: 'Swaggy', y: 260 },
+                { key: 'dude', x: 400, scale: 2.5, name: 'Trashi', y: 220 },
+                { key: 'kaeppchen', x: 560, scale: 1.2, name: 'Käppchen', y: 240 },
+                { key: 'edgar', x: 720, scale: 2.0, name: 'Edgar', y: 260 }
+            ];
 
-        const characterSprites = [];
+            characters.forEach((char, idx) => {
+                let sprite;
+                const startX = explosionCenterX;
+                const startY = explosionCenterY;
 
-        characters.forEach((char, idx) => {
-            let sprite;
-            // Alle Charaktere starten von der Explosion-Mitte
-            const startX = explosionCenterX;
-            const startY = explosionCenterY;
+                if (char.key === 'dude' && this.textures.exists('dude')) {
+                    sprite = this.add.sprite(startX, startY, 'dude', 4).setScale(0);
+                } else if (char.key === 'kaeppchen' && this.textures.exists('kaeppchen')) {
+                    sprite = this.add.sprite(startX, startY, 'kaeppchen', 0).setScale(0);
+                } else if (char.key === 'edgar' && this.textures.exists('edgar')) {
+                    sprite = this.add.image(startX, startY, 'edgar').setScale(0);
+                } else if (this.textures.exists(char.key)) {
+                    sprite = this.add.image(startX, startY, char.key).setScale(0);
+                } else {
+                    sprite = this.add.circle(startX, startY, 30, 0x888888).setScale(0);
+                }
 
-            if (char.key === 'dude' && this.textures.exists('dude')) {
-                sprite = this.add.sprite(startX, startY, 'dude', 4).setScale(0);
-            } else if (char.key === 'kaeppchen' && this.textures.exists('kaeppchen')) {
-                sprite = this.add.sprite(startX, startY, 'kaeppchen', 0).setScale(0);
-            } else if (char.key === 'edgar' && this.textures.exists('edgar')) {
-                sprite = this.add.image(startX, startY, 'edgar').setScale(0);
-            } else if (this.textures.exists(char.key)) {
-                sprite = this.add.image(startX, startY, char.key).setScale(0);
-            } else {
-                sprite = this.add.circle(startX, startY, 30, 0x888888).setScale(0);
-            }
-
-            characterSprites.push({ sprite, char, idx });
-
-            // Charakter fliegt aus Explosion heraus (verzögert)
-            this.time.delayedCall(300 + idx * 100, () => {
-                this.tweens.add({
-                    targets: sprite,
-                    x: char.x,
-                    y: char.y,
-                    scale: char.scale,
-                    duration: 600,
-                    ease: 'Back.easeOut',
-                    onComplete: () => {
-                        // Nach Landung: Wackel-Effekt + Schweben
-                        this.tweens.add({
-                            targets: sprite,
-                            y: char.y - 10,
-                            angle: { from: -3, to: 3 },
-                            duration: 1200 + idx * 200,
-                            yoyo: true,
-                            repeat: -1,
-                            ease: 'Sine.easeInOut'
-                        });
-
-                        // Spezielle Animationen für animierte Charaktere
-                        if (char.key === 'dude' && sprite.anims) {
-                            const anims = ['dude_left', 'dude_idle', 'dude_right', 'dude_idle'];
-                            let animIdx = 0;
-                            this.time.addEvent({
-                                delay: 800,
-                                callback: () => {
-                                    sprite.play(anims[animIdx % anims.length]);
-                                    animIdx++;
-                                },
-                                loop: true
-                            });
-                        } else if (char.key === 'kaeppchen' && sprite.anims) {
-                            const anims = ['kaeppchen_down', 'kaeppchen_left', 'kaeppchen_up', 'kaeppchen_right'];
-                            let animIdx = 0;
-                            this.time.addEvent({
-                                delay: 1000,
-                                callback: () => {
-                                    sprite.play(anims[animIdx % anims.length]);
-                                    animIdx++;
-                                },
-                                loop: true
-                            });
-                        } else if (char.key === 'edgar') {
-                            // Edgar rotiert weiter
+                this.time.delayedCall(300 + idx * 100, () => {
+                    this.tweens.add({
+                        targets: sprite,
+                        x: char.x,
+                        y: char.y,
+                        scale: char.scale,
+                        duration: 600,
+                        ease: 'Back.easeOut',
+                        onComplete: () => {
                             this.tweens.add({
                                 targets: sprite,
-                                angle: '+=360',
-                                duration: 2000,
+                                y: char.y - 10,
+                                angle: { from: -3, to: 3 },
+                                duration: 1200 + idx * 200,
+                                yoyo: true,
                                 repeat: -1,
-                                ease: 'Linear'
+                                ease: 'Sine.easeInOut'
+                            });
+
+                            if (char.key === 'dude' && sprite.anims) {
+                                const anims = ['dude_left', 'dude_idle', 'dude_right', 'dude_idle'];
+                                let animIdx = 0;
+                                this.time.addEvent({ delay: 800, callback: () => { sprite.play(anims[animIdx++ % anims.length]); }, loop: true });
+                            } else if (char.key === 'kaeppchen' && sprite.anims) {
+                                const anims = ['kaeppchen_down', 'kaeppchen_left', 'kaeppchen_up', 'kaeppchen_right'];
+                                let animIdx = 0;
+                                this.time.addEvent({ delay: 1000, callback: () => { sprite.play(anims[animIdx++ % anims.length]); }, loop: true });
+                            } else if (char.key === 'edgar') {
+                                this.tweens.add({ targets: sprite, angle: '+=360', duration: 2000, repeat: -1, ease: 'Linear' });
+                            }
+                        }
+                    });
+                });
+
+                const nameText = this.add.text(char.x, 310, char.name, { font: 'bold 11px Orbitron', fill: '#ffffff' }).setOrigin(0.5).setAlpha(0);
+                this.time.delayedCall(900 + idx * 100, () => { this.tweens.add({ targets: nameText, alpha: 1, duration: 300 }); });
+            });
+        } else {
+            // DEFAULT STYLE: characters.png fliegt rein und wackelt
+            if (this.textures.exists('characters')) {
+                const charImg = this.add.image(explosionCenterX, explosionCenterY, 'characters').setScale(0).setAlpha(0);
+                this.time.delayedCall(400, () => {
+                    this.tweens.add({
+                        targets: charImg,
+                        scale: 0.35,
+                        alpha: 1,
+                        duration: 600,
+                        ease: 'Back.easeOut',
+                        onComplete: () => {
+                            // Wackel-Animation
+                            this.tweens.add({
+                                targets: charImg,
+                                y: explosionCenterY - 8,
+                                angle: { from: -2, to: 2 },
+                                duration: 400,
+                                yoyo: true,
+                                repeat: -1,
+                                ease: 'Sine.easeInOut'
                             });
                         }
-                    }
+                    });
                 });
-            });
-
-            // Charakter-Name (erscheint nach Animation)
-            const nameText = this.add.text(char.x, 310, char.name, {
-                font: 'bold 11px Orbitron', fill: '#ffffff'
-            }).setOrigin(0.5).setAlpha(0);
-
-            this.time.delayedCall(900 + idx * 100, () => {
-                this.tweens.add({
-                    targets: nameText,
-                    alpha: 1,
-                    duration: 300
-                });
-            });
-        });
+            } else {
+                // Fallback wenn characters.png nicht geladen
+                this.add.text(400, 260, '🎮 ZOBELWARE 🎮', { font: 'bold 24px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+            }
+        }
 
         // Highscore
         this.add.text(400, 370, 'Highscore: ' + playerData.highScore + ' | 💰 ' + playerData.coins, { font: '16px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
@@ -3631,6 +3632,16 @@ class ShopScene extends Phaser.Scene {
             { id: 'particles_sparkle', name: 'Glitzer', price: 150, type: 'particles', value: 'sparkle', preview: '✨' },
             { id: 'particles_hearts', name: 'Herzen', price: 200, type: 'particles', value: 'hearts', preview: '💕' },
             { id: 'particles_coins', name: 'Münzregen', price: 350, type: 'particles', value: 'coins', preview: '🪙' },
+            // StartScreen Styles
+            { id: 'startscreen_default', name: 'Standard', price: 0, type: 'startscreen', value: 'default', preview: '🖼️' },
+            { id: 'startscreen_individual', name: 'Einzeln', price: 200, type: 'startscreen', value: 'individual', preview: '👥' },
+            // Übergangsfarben
+            { id: 'transition_brown', name: 'Braun (Standard)', price: 0, type: 'transition', value: 0x8B7355, preview: '🟤' },
+            { id: 'transition_blue', name: 'Blau', price: 100, type: 'transition', value: 0x1a1a4e, preview: '🔵' },
+            { id: 'transition_green', name: 'Grün', price: 100, type: 'transition', value: 0x1a4e1a, preview: '🟢' },
+            { id: 'transition_purple', name: 'Lila', price: 100, type: 'transition', value: 0x4e1a4e, preview: '🟣' },
+            { id: 'transition_red', name: 'Rot', price: 100, type: 'transition', value: 0x4e1a1a, preview: '🔴' },
+            { id: 'transition_black', name: 'Schwarz', price: 150, type: 'transition', value: 0x0a0a0a, preview: '⬛' },
         ];
 
         // Kategorien Buttons
@@ -3658,17 +3669,19 @@ class ShopScene extends Phaser.Scene {
     }
     createCategoryButtons() {
         const categories = [
-            { id: 'color', name: '🎨 Farben', x: 120 },
-            { id: 'background', name: '🖼️ Hintergründe', x: 300 },
-            { id: 'particles', name: '✨ Effekte', x: 480 }
+            { id: 'color', name: '🎨 Farben', x: 80 },
+            { id: 'background', name: '🖼️ Hinter.', x: 200 },
+            { id: 'particles', name: '✨ Effekte', x: 320 },
+            { id: 'startscreen', name: '🏠 Start', x: 440 },
+            { id: 'transition', name: '🎬 Übergang', x: 560 }
         ];
         this.categoryButtons = [];
         categories.forEach(cat => {
             const isActive = this.currentCategory === cat.id;
-            const btn = this.add.rectangle(cat.x, 130, 150, 35, isActive ? 0x00ff88 : 0x333333)
+            const btn = this.add.rectangle(cat.x, 130, 110, 35, isActive ? 0x00ff88 : 0x333333)
                 .setInteractive({ useHandCursor: true });
             btn.setStrokeStyle(2, 0x00ff88);
-            const txt = this.add.text(cat.x, 130, cat.name, { font: '14px Orbitron', fill: isActive ? '#000' : '#fff' }).setOrigin(0.5);
+            const txt = this.add.text(cat.x, 130, cat.name, { font: '11px Orbitron', fill: isActive ? '#000' : '#fff' }).setOrigin(0.5);
             btn.on('pointerdown', () => {
                 this.scene.restart({ category: cat.id });
             });
@@ -3726,6 +3739,8 @@ class ShopScene extends Phaser.Scene {
         if (item.type === 'color') return playerData.activeZobelColor === item.value;
         if (item.type === 'background') return playerData.activeBackground === item.value;
         if (item.type === 'particles') return playerData.activeParticles === item.value;
+        if (item.type === 'startscreen') return playerData.startScreenStyle === item.value;
+        if (item.type === 'transition') return playerData.transitionColor === item.value;
         return false;
     }
     handleItemClick(item) {
@@ -3734,6 +3749,8 @@ class ShopScene extends Phaser.Scene {
             if (item.type === 'color') playerData.setZobelColor(item.value);
             else if (item.type === 'background') playerData.setBackground(item.value);
             else if (item.type === 'particles') playerData.setParticles(item.value);
+            else if (item.type === 'startscreen') { playerData.startScreenStyle = item.value; playerData.saveData(); }
+            else if (item.type === 'transition') { playerData.transitionColor = item.value; playerData.saveData(); }
             musicEngine.playSFX('click');
             this.scene.restart({ category: this.currentCategory });
         } else {
@@ -3791,9 +3808,9 @@ class GameScene extends Phaser.Scene {
         musicEngine.stopMusic();
         const transitionDuration = Math.max(800, 1600 / this.gameSpeed);
 
-        // Hintergrund verdunkeln
+        // Hintergrund verdunkeln (Farbe aus Shop-Einstellung)
         const char = CharacterManager.getCurrentCharacter();
-        const bgColor = Phaser.Display.Color.IntegerToColor(char.color).darken(70).color;
+        const bgColor = playerData.transitionColor;
         const bg = this.add.rectangle(400, 300, 800, 600, bgColor, 0.95).setDepth(100);
 
         // Rundenzahl
