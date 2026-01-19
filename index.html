@@ -362,7 +362,8 @@ const CharacterManager = {
                 { key: 'CatchTheGem', name: 'EDELSTEIN!', duration: 3000, keys: '🖱️ MAUS', music: 'action' },
                 { key: 'BalanceStick', name: 'BALANCE!', duration: 4000, keys: '🖱️ MAUS', music: 'calm' },
                 { key: 'ZobelHide', name: 'VERSTECKEN!', duration: 3000, keys: '🖱️ KLICK', music: 'tense' },
-                { key: 'ZobelRun', name: 'RENNEN!', duration: 4000, keys: '← →', music: 'rush' }
+                { key: 'ZobelRun', name: 'RENNEN!', duration: 4000, keys: '← →', music: 'rush' },
+                { key: 'ZobelSneeze', name: 'NÜSSE!', duration: 4000, keys: '← →', music: 'happy' }
             ],
             boss: { key: 'BossGame', name: 'ZOBEL BOSS!' }
         },
@@ -382,7 +383,8 @@ const CharacterManager = {
                 { key: 'ConnectTheLovers', name: 'VERBINDEN!', duration: 5000, keys: '🖱️ DRAG', music: 'happy' },
                 { key: 'DontPress', name: 'NICHT!', duration: 3000, keys: '🚫 WARTE', music: 'tense' },
                 { key: 'SpotTheOdd', name: 'FINDE!', duration: 4000, keys: '🖱️ KLICK', music: 'puzzle' },
-                { key: 'SwaggyFish', name: 'FISCHEN!', duration: 4000, keys: '🖱️ KLICK', music: 'calm' }
+                { key: 'SwaggyFish', name: 'FISCHEN!', duration: 4000, keys: '🖱️ KLICK', music: 'calm' },
+                { key: 'SwaggyJump', name: 'HÜPFEN!', duration: 5000, keys: 'SPACE', music: 'action' }
             ],
             boss: { key: 'SwaggyBoss', name: 'SWAGGY BOSS!' }
         },
@@ -403,7 +405,8 @@ const CharacterManager = {
                 { key: 'HitTheTarget', name: 'TREFFEN!', duration: 3000, keys: '🖱️ KLICK', music: 'action' },
                 { key: 'FastClicker', name: 'SCHNELL!', duration: 3500, keys: '🖱️ KLICK', music: 'rush' },
                 { key: 'TypeTheWord', name: 'TIPPEN!', duration: 5000, keys: '⌨️ ABC', music: 'puzzle' },
-                { key: 'MathQuiz', name: 'MATHE!', duration: 4000, keys: '← →', music: 'puzzle' }
+                { key: 'MathQuiz', name: 'MATHE!', duration: 4000, keys: '← →', music: 'puzzle' },
+                { key: 'DudeSlide', name: 'RUTSCHEN!', duration: 4000, keys: '← →', music: 'rush' }
             ],
             boss: { key: 'BoxingBoss', name: 'BOXING BOSS!' }
         },
@@ -424,7 +427,8 @@ const CharacterManager = {
                 { key: 'SpotTheOdd', name: 'FINDE!', duration: 4000, keys: '🖱️ KLICK', music: 'puzzle' },
                 { key: 'StopWatch', name: 'STOPPUHR!', duration: 4000, keys: 'SPACE', music: 'calm' },
                 { key: 'ClickTheButton', name: 'KLICK!', duration: 3000, keys: '🖱️ KLICK', music: 'action' },
-                { key: 'DontPress', name: 'NICHT!', duration: 3000, keys: '🚫 WARTE', music: 'tense' }
+                { key: 'DontPress', name: 'NICHT!', duration: 3000, keys: '🚫 WARTE', music: 'tense' },
+                { key: 'KaeppchenPick', name: 'PFLÜCKEN!', duration: 4000, keys: '🖱️ KLICK', music: 'happy' }
             ],
             boss: { key: 'KaeppchenBoss', name: 'WOLF BOSS!' }
         },
@@ -445,7 +449,8 @@ const CharacterManager = {
                 { key: 'HitTheTarget', name: 'TREFFEN!', duration: 3000, keys: '🖱️ KLICK', music: 'action' },
                 { key: 'FastClicker', name: 'SCHNELL!', duration: 3500, keys: '🖱️ KLICK', music: 'rush' },
                 { key: 'MashTheKey', name: 'HÄMMERN!', duration: 3500, keys: '⌨️ ALLE', music: 'rush' },
-                { key: 'MathQuiz', name: 'MATHE!', duration: 4000, keys: '← →', music: 'puzzle' }
+                { key: 'MathQuiz', name: 'MATHE!', duration: 4000, keys: '← →', music: 'puzzle' },
+                { key: 'EdgarPinball', name: 'FLIPPER!', duration: 5000, keys: '← →', music: 'action' }
             ],
             boss: { key: 'EdgarBoss', name: 'EDGAR BOSS!' }
         }
@@ -2001,14 +2006,27 @@ class KaeppchenMaze extends BaseMicrogame {
 
         this.add.text(400, 20, 'Erreiche das Ziel!', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
-        // Einfache Wände
+        // Labyrinth-Wände (blockieren den direkten Weg)
         this.walls = [];
         const wallPositions = [
-            [200, 150, 300, 20], [500, 250, 20, 200], [300, 400, 250, 20],
-            [150, 300, 20, 150], [600, 150, 20, 150]
+            // Rand-Wände (Spielfeld begrenzen)
+            [400, 45, 760, 10],   // Oben
+            [400, 555, 760, 10],  // Unten
+            [25, 300, 10, 500],   // Links
+            [775, 300, 10, 500],  // Rechts
+            // Labyrinth innere Wände
+            [150, 150, 200, 15],  // Oben links horizontal
+            [150, 250, 15, 215],  // Links vertikal (blockiert Aufstieg)
+            [300, 350, 300, 15],  // Mitte horizontal
+            [450, 200, 15, 315],  // Mitte vertikal (Hauptblockade)
+            [600, 450, 200, 15],  // Unten rechts horizontal
+            [550, 150, 15, 200],  // Rechts vertikal oben
+            [650, 250, 100, 15],  // Rechts horizontal
+            [250, 480, 150, 15],  // Unten links horizontal
         ];
         wallPositions.forEach(w => {
             const wall = this.add.rectangle(w[0], w[1], w[2], w[3], 0x4a3728);
+            wall.setStrokeStyle(2, 0x2a1a08);
             this.walls.push(wall);
         });
 
@@ -2488,6 +2506,309 @@ class EdgarDodge extends BaseMicrogame {
                 this.lose();
             }
         }
+    }
+}
+
+// NEUE SPIELE - eines pro Charakter
+class ZobelSneeze extends BaseMicrogame {
+    constructor() { super({ key: 'ZobelSneeze' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#87CEEB');
+        this.add.text(400, 30, 'Fang die Nüsse! ← →', { font: '18px Orbitron', fill: '#000' }).setOrigin(0.5);
+
+        // Zobel (Korb)
+        this.basketX = 400;
+        if (this.textures.exists('zobel')) {
+            this.basket = this.add.image(this.basketX, 500, 'zobel').setScale(0.2);
+        } else {
+            this.basket = this.add.rectangle(this.basketX, 500, 80, 40, 0x8B7355);
+        }
+
+        // Nüsse die fallen
+        this.nuts = [];
+        this.caught = 0;
+        this.target = 5;
+        this.counterText = this.add.text(400, 80, '0/' + this.target, { font: 'bold 32px Orbitron', fill: '#8B4513' }).setOrigin(0.5);
+
+        this.spawnTimer = this.time.addEvent({
+            delay: 400,
+            callback: () => {
+                if (this.hasEnded) return;
+                const nut = this.add.circle(Phaser.Math.Between(50, 750), -20, 12, 0x8B4513);
+                nut.vy = Phaser.Math.Between(4, 7);
+                this.nuts.push(nut);
+            },
+            loop: true
+        });
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        if (this.cursors.left.isDown) this.basketX -= 8;
+        if (this.cursors.right.isDown) this.basketX += 8;
+        this.basketX = Phaser.Math.Clamp(this.basketX, 50, 750);
+        this.basket.x = this.basketX;
+
+        for (let i = this.nuts.length - 1; i >= 0; i--) {
+            const nut = this.nuts[i];
+            nut.y += nut.vy;
+            if (nut.y > 600) { nut.destroy(); this.nuts.splice(i, 1); continue; }
+            if (Math.abs(nut.x - this.basketX) < 50 && nut.y > 470 && nut.y < 520) {
+                nut.destroy(); this.nuts.splice(i, 1);
+                this.caught++;
+                this.counterText.setText(this.caught + '/' + this.target);
+                if (this.caught >= this.target) this.win();
+            }
+        }
+    }
+}
+
+class SwaggyJump extends BaseMicrogame {
+    constructor() { super({ key: 'SwaggyJump' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#006994');
+        this.add.text(400, 30, 'Spring zum Ziel! SPACE', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Plattformen
+        this.platforms = [
+            this.add.rectangle(80, 500, 120, 20, 0x2ecc71),
+            this.add.rectangle(250, 420, 100, 20, 0x2ecc71),
+            this.add.rectangle(420, 340, 100, 20, 0x2ecc71),
+            this.add.rectangle(600, 260, 100, 20, 0x2ecc71),
+            this.add.rectangle(720, 150, 120, 20, 0xFFD700)
+        ];
+        this.add.text(720, 130, '⭐', { font: '24px Arial' }).setOrigin(0.5);
+
+        // Swaggy
+        this.swaggyX = 80; this.swaggyY = 470;
+        this.velY = 0; this.onGround = true; this.currentPlatform = 0;
+        if (this.textures.exists('swaggy')) {
+            this.swaggy = this.add.image(this.swaggyX, this.swaggyY, 'swaggy').setScale(0.06);
+        } else {
+            this.swaggy = this.add.circle(this.swaggyX, this.swaggyY, 20, 0xFFA500);
+        }
+
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (this.hasEnded || !this.onGround) return;
+            this.velY = -12;
+            this.onGround = false;
+        });
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        this.velY += 0.5; // Gravity
+        this.swaggyY += this.velY;
+        this.swaggyX += 2; // Auto move right
+
+        // Platform collision
+        this.platforms.forEach((p, i) => {
+            if (this.swaggyX > p.x - 60 && this.swaggyX < p.x + 60 &&
+                this.swaggyY > p.y - 30 && this.swaggyY < p.y && this.velY > 0) {
+                this.swaggyY = p.y - 20;
+                this.velY = 0;
+                this.onGround = true;
+                if (i === 4) this.win(); // Reached goal
+            }
+        });
+
+        if (this.swaggyY > 600) this.lose();
+        this.swaggy.x = this.swaggyX;
+        this.swaggy.y = this.swaggyY;
+    }
+}
+
+class DudeSlide extends BaseMicrogame {
+    constructor() { super({ key: 'DudeSlide' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+        this.add.text(400, 30, 'Rutsche runter! ← →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Trashi
+        this.dudeX = 400; this.dudeY = 100;
+        if (this.textures.exists('dude')) {
+            this.dude = this.add.sprite(this.dudeX, this.dudeY, 'dude', 4).setScale(2.5);
+        } else {
+            this.dude = this.add.rectangle(this.dudeX, this.dudeY, 30, 45, 0x4169E1);
+        }
+
+        // Hindernisse
+        this.obstacles = [];
+        for (let row = 0; row < 4; row++) {
+            const y = 200 + row * 100;
+            const numObs = Phaser.Math.Between(2, 4);
+            const positions = Phaser.Utils.Array.Shuffle([100, 250, 400, 550, 700]).slice(0, numObs);
+            positions.forEach(x => {
+                const obs = this.add.rectangle(x, y, 60, 20, 0xff6b6b);
+                this.obstacles.push(obs);
+            });
+        }
+
+        // Ziel
+        this.goal = this.add.rectangle(400, 550, 200, 30, 0x00ff88);
+        this.add.text(400, 550, 'ZIEL', { font: 'bold 14px Orbitron', fill: '#000' }).setOrigin(0.5);
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        if (this.cursors.left.isDown) this.dudeX -= 6;
+        if (this.cursors.right.isDown) this.dudeX += 6;
+        this.dudeX = Phaser.Math.Clamp(this.dudeX, 30, 770);
+        this.dudeY += 2; // Auto slide down
+
+        this.dude.x = this.dudeX;
+        this.dude.y = this.dudeY;
+        if (this.dude.play && (this.cursors.left.isDown || this.cursors.right.isDown)) {
+            this.dude.play(this.cursors.left.isDown ? 'dude_left' : 'dude_right', true);
+        }
+
+        // Check obstacle collision
+        this.obstacles.forEach(obs => {
+            if (Math.abs(this.dudeX - obs.x) < 45 && Math.abs(this.dudeY - obs.y) < 25) {
+                this.lose();
+            }
+        });
+
+        // Check goal
+        if (this.dudeY > 530) this.win();
+    }
+}
+
+class KaeppchenPick extends BaseMicrogame {
+    constructor() { super({ key: 'KaeppchenPick' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#90EE90');
+        this.add.text(400, 30, 'Pflücke die roten Blumen! Klick', { font: '16px Orbitron', fill: '#000' }).setOrigin(0.5);
+
+        this.picked = 0;
+        this.target = 5;
+        this.counterText = this.add.text(400, 70, '0/' + this.target, { font: 'bold 28px Orbitron', fill: '#E63946' }).setOrigin(0.5);
+
+        // Blumen spawnen
+        this.flowers = [];
+        for (let i = 0; i < 15; i++) {
+            const isRed = i < 5;
+            const flower = this.add.text(
+                Phaser.Math.Between(60, 740),
+                Phaser.Math.Between(120, 520),
+                isRed ? '🌹' : '🌼',
+                { font: '36px Arial' }
+            ).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            flower.isRed = isRed;
+            flower.on('pointerdown', () => {
+                if (this.hasEnded) return;
+                if (flower.isRed) {
+                    this.picked++;
+                    this.counterText.setText(this.picked + '/' + this.target);
+                    flower.destroy();
+                    if (this.picked >= this.target) this.win();
+                } else {
+                    this.lose();
+                }
+            });
+            this.flowers.push(flower);
+        }
+        // Shuffle visual positions
+        Phaser.Utils.Array.Shuffle(this.flowers);
+
+        this.startTimer();
+    }
+}
+
+class EdgarPinball extends BaseMicrogame {
+    constructor() { super({ key: 'EdgarPinball' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a0a2e');
+        this.add.text(400, 30, 'Triff alle Bumper! ← →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Flipper
+        this.flipperX = 400;
+        this.flipper = this.add.rectangle(this.flipperX, 530, 120, 15, 0x9B59B6);
+
+        // Edgar als Ball
+        this.edgarX = 400; this.edgarY = 200;
+        this.velX = Phaser.Math.Between(-3, 3); this.velY = 3;
+        if (this.textures.exists('edgar')) {
+            this.edgar = this.add.image(this.edgarX, this.edgarY, 'edgar').setScale(2);
+        } else {
+            this.edgar = this.add.circle(this.edgarX, this.edgarY, 20, 0x9B59B6);
+        }
+
+        // Bumper
+        this.bumpers = [];
+        this.bumperHit = 0;
+        this.target = 5;
+        const positions = [[200, 200], [400, 150], [600, 200], [300, 350], [500, 350]];
+        positions.forEach(p => {
+            const b = this.add.circle(p[0], p[1], 25, 0xFFD700);
+            b.setStrokeStyle(3, 0xffffff);
+            b.hit = false;
+            this.bumpers.push(b);
+        });
+
+        this.counterText = this.add.text(400, 70, '0/' + this.target, { font: 'bold 24px Orbitron', fill: '#FFD700' }).setOrigin(0.5);
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        // Flipper bewegen
+        if (this.cursors.left.isDown) this.flipperX -= 8;
+        if (this.cursors.right.isDown) this.flipperX += 8;
+        this.flipperX = Phaser.Math.Clamp(this.flipperX, 80, 720);
+        this.flipper.x = this.flipperX;
+
+        // Edgar Ball Physik
+        this.edgarX += this.velX;
+        this.edgarY += this.velY;
+        this.velY += 0.15; // Gravity
+
+        // Wand-Kollision
+        if (this.edgarX < 30 || this.edgarX > 770) this.velX *= -1;
+        if (this.edgarY < 50) this.velY *= -1;
+
+        // Flipper Kollision
+        if (this.edgarY > 510 && this.edgarY < 540 && Math.abs(this.edgarX - this.flipperX) < 70) {
+            this.velY = -10;
+            this.velX = (this.edgarX - this.flipperX) / 10;
+        }
+
+        // Bumper Kollision
+        this.bumpers.forEach(b => {
+            if (!b.hit && Phaser.Math.Distance.Between(this.edgarX, this.edgarY, b.x, b.y) < 45) {
+                b.hit = true;
+                b.setFillStyle(0x00ff88);
+                this.bumperHit++;
+                this.counterText.setText(this.bumperHit + '/' + this.target);
+                this.velY *= -1.2;
+                this.velX += Phaser.Math.Between(-2, 2);
+                if (this.bumperHit >= this.target) this.win();
+            }
+        });
+
+        // Ball verloren
+        if (this.edgarY > 580) this.lose();
+
+        this.edgar.x = this.edgarX;
+        this.edgar.y = this.edgarY;
+        this.edgar.angle += this.velX * 2;
     }
 }
 
@@ -3361,7 +3682,7 @@ class StartScreen extends Phaser.Scene {
         const title = this.add.text(400, 100, 'ZOBELWARE', { font: 'bold 72px Orbitron', fill: '#00ff88', stroke: '#00ff88', strokeThickness: 2 }).setOrigin(0.5);
         this.add.text(400, 103, 'ZOBELWARE', { font: 'bold 72px Orbitron', fill: '#00aa55' }).setOrigin(0.5).setAlpha(0.5);
         this.tweens.add({ targets: title, scaleX: 1.02, scaleY: 1.02, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-        this.add.text(400, 160, 'v2.0 - WarioWare Style!', { font: '16px Orbitron', fill: '#888' }).setOrigin(0.5);
+        this.add.text(400, 160, 'New Friends Edition', { font: '16px Orbitron', fill: '#888' }).setOrigin(0.5);
 
         // EXPLOSION ANIMATION
         const explosionCenterX = 400;
@@ -3549,18 +3870,23 @@ class AlbumScene extends Phaser.Scene {
             { key: 'ZobelCatch', name: 'Zobel Catch', color: 0x8B7355 }, { key: 'FeedZobel', name: 'Füttern', color: 0x8B7355 },
             { key: 'ZobelDance', name: 'Zobel Dance', color: 0x8B7355 }, { key: 'ZobelHide', name: 'Zobel Hide', color: 0x8B7355 },
             { key: 'ZobelRun', name: 'Zobel Run', color: 0x8B7355 },
+            { key: 'ZobelSneeze', name: 'Nüsse', color: 0x8B7355 },
             // Swaggy Spiele
             { key: 'SwaggySwim', name: 'Swaggy Swim', color: 0xFFA500 }, { key: 'SwaggyBubble', name: 'Swaggy Bubble', color: 0xFFA500 },
             { key: 'SwaggyDance', name: 'Swaggy Dance', color: 0xFFA500 }, { key: 'SwaggyFish', name: 'Swaggy Fish', color: 0xFFA500 },
+            { key: 'SwaggyJump', name: 'Swaggy Hüpfen', color: 0xFFA500 },
             // Trashi Spiele
             { key: 'DudeRun', name: 'Trashi Run', color: 0x4169E1 }, { key: 'DudeDodge', name: 'Trashi Dodge', color: 0x4169E1 },
             { key: 'DudeJump', name: 'Trashi Jump', color: 0x4169E1 },
+            { key: 'DudeSlide', name: 'Trashi Rutschen', color: 0x4169E1 },
             // Käppchen Spiele
             { key: 'KaeppchenCollect', name: 'Sammeln', color: 0xE63946 }, { key: 'KaeppchenMaze', name: 'Labyrinth', color: 0xE63946 },
             { key: 'KaeppchenDodge', name: 'Wölfe', color: 0xE63946 }, { key: 'KaeppchenDeliver', name: 'Liefern', color: 0xE63946 },
+            { key: 'KaeppchenPick', name: 'Pflücken', color: 0xE63946 },
             // Edgar Spiele
             { key: 'EdgarRoll', name: 'Rollen', color: 0x9B59B6 }, { key: 'EdgarBounce', name: 'Hüpfen', color: 0x9B59B6 },
-            { key: 'EdgarGoal', name: 'Tor', color: 0x9B59B6 }, { key: 'EdgarDodge', name: 'Ausweichen', color: 0x9B59B6 }
+            { key: 'EdgarGoal', name: 'Tor', color: 0x9B59B6 }, { key: 'EdgarDodge', name: 'Ausweichen', color: 0x9B59B6 },
+            { key: 'EdgarPinball', name: 'Flipper', color: 0x9B59B6 }
         ];
         this.allGames = games; this.currentPage = 0; this.itemsPerPage = 12; this.totalPages = Math.ceil(games.length / this.itemsPerPage);
         this.cardsContainer = this.add.container(0, 0);
@@ -3572,7 +3898,7 @@ class AlbumScene extends Phaser.Scene {
         this.cardsContainer.removeAll(true);
         const startIdx = this.currentPage * this.itemsPerPage;
         const pageGames = this.allGames.slice(startIdx, startIdx + this.itemsPerPage);
-        const cols = 4, cardW = 170, cardH = 95, startX = 85, startY = 120, gapX = 12, gapY = 12;
+        const cols = 4, cardW = 170, cardH = 95, startX = 42, startY = 120, gapX = 12, gapY = 12;
         pageGames.forEach((game, idx) => {
             const col = idx % cols, row = Math.floor(idx / cols);
             const x = startX + col * (cardW + gapX), y = startY + row * (cardH + gapY);
@@ -3605,7 +3931,7 @@ class AlbumScene extends Phaser.Scene {
 class ShopScene extends Phaser.Scene {
     constructor() { super({ key: 'ShopScene' }); }
     init(data) {
-        this.currentCategory = data.category || 'color';
+        this.currentCategory = data.category || 'startscreen';
     }
     create() {
         this.cameras.main.setBackgroundColor('#1a0a2e');
@@ -3616,27 +3942,13 @@ class ShopScene extends Phaser.Scene {
         // Münzen anzeigen
         this.coinsText = this.add.text(400, 85, '💰 ' + playerData.coins + ' Münzen', { font: 'bold 20px Orbitron', fill: '#ffff00' }).setOrigin(0.5);
 
-        // Shop Items
+        // Shop Items (nur StartScreen und Übergangsfarben)
         this.shopItems = [
-            // Zobel Farben
-            { id: 'color_blue', name: 'Blaues Zobel', price: 100, type: 'color', value: 0x00d4ff, preview: '🔵' },
-            { id: 'color_red', name: 'Rotes Zobel', price: 100, type: 'color', value: 0xff6b6b, preview: '🔴' },
-            { id: 'color_gold', name: 'Goldenes Zobel', price: 250, type: 'color', value: 0xffd700, preview: '🟡' },
-            { id: 'color_purple', name: 'Lila Zobel', price: 150, type: 'color', value: 0x9b59b6, preview: '🟣' },
-            { id: 'color_rainbow', name: 'Regenbogen Zobel', price: 500, type: 'color', value: 'rainbow', preview: '🌈' },
-            // Hintergründe
-            { id: 'bg_stars', name: 'Sternenhimmel', price: 200, type: 'background', value: 'stars', preview: '⭐' },
-            { id: 'bg_matrix', name: 'Matrix Regen', price: 300, type: 'background', value: 'matrix', preview: '💚' },
-            { id: 'bg_fire', name: 'Feuer', price: 250, type: 'background', value: 'fire', preview: '🔥' },
-            // Partikel
-            { id: 'particles_sparkle', name: 'Glitzer', price: 150, type: 'particles', value: 'sparkle', preview: '✨' },
-            { id: 'particles_hearts', name: 'Herzen', price: 200, type: 'particles', value: 'hearts', preview: '💕' },
-            { id: 'particles_coins', name: 'Münzregen', price: 350, type: 'particles', value: 'coins', preview: '🪙' },
             // StartScreen Styles
-            { id: 'startscreen_default', name: 'Standard', price: 0, type: 'startscreen', value: 'default', preview: '🖼️' },
-            { id: 'startscreen_individual', name: 'Einzeln', price: 200, type: 'startscreen', value: 'individual', preview: '👥' },
+            { id: 'startscreen_default', name: 'Gruppenbild', price: 0, type: 'startscreen', value: 'default', preview: '🖼️' },
+            { id: 'startscreen_individual', name: 'Einzeln Animiert', price: 200, type: 'startscreen', value: 'individual', preview: '👥' },
             // Übergangsfarben
-            { id: 'transition_brown', name: 'Braun (Standard)', price: 0, type: 'transition', value: 0x8B7355, preview: '🟤' },
+            { id: 'transition_brown', name: 'Braun', price: 0, type: 'transition', value: 0x8B7355, preview: '🟤' },
             { id: 'transition_blue', name: 'Blau', price: 100, type: 'transition', value: 0x1a1a4e, preview: '🔵' },
             { id: 'transition_green', name: 'Grün', price: 100, type: 'transition', value: 0x1a4e1a, preview: '🟢' },
             { id: 'transition_purple', name: 'Lila', price: 100, type: 'transition', value: 0x4e1a4e, preview: '🟣' },
@@ -3651,12 +3963,6 @@ class ShopScene extends Phaser.Scene {
         this.itemsContainer = this.add.container(0, 0);
         this.drawItems();
 
-        // Vorschau Zobel
-        let previewColor = playerData.activeZobelColor;
-        if (previewColor === 'rainbow') previewColor = 0x00ff88;
-        this.previewZobel = Zobel.draw(this, 650, 450, 0.7, previewColor);
-        this.add.text(650, 530, 'Vorschau', { font: '14px Orbitron', fill: '#888' }).setOrigin(0.5);
-
         // Zurück Button
         const backBtn = this.add.rectangle(400, 560, 180, 45, 0xff6b6b).setInteractive({ useHandCursor: true });
         backBtn.setStrokeStyle(2, 0xffffff);
@@ -3669,19 +3975,16 @@ class ShopScene extends Phaser.Scene {
     }
     createCategoryButtons() {
         const categories = [
-            { id: 'color', name: '🎨 Farben', x: 80 },
-            { id: 'background', name: '🖼️ Hinter.', x: 200 },
-            { id: 'particles', name: '✨ Effekte', x: 320 },
-            { id: 'startscreen', name: '🏠 Start', x: 440 },
-            { id: 'transition', name: '🎬 Übergang', x: 560 }
+            { id: 'startscreen', name: '🏠 Startbildschirm', x: 250 },
+            { id: 'transition', name: '🎬 Übergangsfarbe', x: 550 }
         ];
         this.categoryButtons = [];
         categories.forEach(cat => {
             const isActive = this.currentCategory === cat.id;
-            const btn = this.add.rectangle(cat.x, 130, 110, 35, isActive ? 0x00ff88 : 0x333333)
+            const btn = this.add.rectangle(cat.x, 130, 200, 40, isActive ? 0x00ff88 : 0x333333)
                 .setInteractive({ useHandCursor: true });
             btn.setStrokeStyle(2, 0x00ff88);
-            const txt = this.add.text(cat.x, 130, cat.name, { font: '11px Orbitron', fill: isActive ? '#000' : '#fff' }).setOrigin(0.5);
+            const txt = this.add.text(cat.x, 130, cat.name, { font: '14px Orbitron', fill: isActive ? '#000' : '#fff' }).setOrigin(0.5);
             btn.on('pointerdown', () => {
                 this.scene.restart({ category: cat.id });
             });
@@ -3728,17 +4031,11 @@ class ShopScene extends Phaser.Scene {
 
             // Klick Handler
             card.on('pointerdown', () => this.handleItemClick(item));
-            card.on('pointerover', () => {
-                card.setFillStyle(0x555555, 0.9);
-                this.updatePreview(item);
-            });
+            card.on('pointerover', () => card.setFillStyle(0x555555, 0.9));
             card.on('pointerout', () => card.setFillStyle(cardColor, 0.8));
         });
     }
     isItemActive(item) {
-        if (item.type === 'color') return playerData.activeZobelColor === item.value;
-        if (item.type === 'background') return playerData.activeBackground === item.value;
-        if (item.type === 'particles') return playerData.activeParticles === item.value;
         if (item.type === 'startscreen') return playerData.startScreenStyle === item.value;
         if (item.type === 'transition') return playerData.transitionColor === item.value;
         return false;
@@ -3746,10 +4043,7 @@ class ShopScene extends Phaser.Scene {
     handleItemClick(item) {
         if (playerData.ownsItem(item.id)) {
             // Aktivieren
-            if (item.type === 'color') playerData.setZobelColor(item.value);
-            else if (item.type === 'background') playerData.setBackground(item.value);
-            else if (item.type === 'particles') playerData.setParticles(item.value);
-            else if (item.type === 'startscreen') { playerData.startScreenStyle = item.value; playerData.saveData(); }
+            if (item.type === 'startscreen') { playerData.startScreenStyle = item.value; playerData.saveData(); }
             else if (item.type === 'transition') { playerData.transitionColor = item.value; playerData.saveData(); }
             musicEngine.playSFX('click');
             this.scene.restart({ category: this.currentCategory });
@@ -3769,12 +4063,6 @@ class ShopScene extends Phaser.Scene {
                 this.time.delayedCall(1000, () => noMoney.destroy());
             }
         }
-    }
-    updatePreview(item) {
-        if (this.previewZobel) this.previewZobel.destroy();
-        let color = item.type === 'color' ? item.value : playerData.activeZobelColor;
-        if (color === 'rainbow') color = Phaser.Display.Color.RandomRGB().color;
-        this.previewZobel = Zobel.draw(this, 650, 450, 0.7, color);
     }
 }
 
@@ -4108,7 +4396,7 @@ class GameScene extends Phaser.Scene {
             oldSprite = Zobel.draw(this, 200, 300, 0.6, oldChar.color);
             oldSprite.setDepth(101);
         }
-        this.add.text(200, 400, oldChar.name, { font: 'bold 20px Orbitron', fill: '#888888' }).setOrigin(0.5).setDepth(101);
+        const oldNameText = this.add.text(200, 400, oldChar.name, { font: 'bold 20px Orbitron', fill: '#888888' }).setOrigin(0.5).setDepth(101);
 
         // Pfeil
         const arrow = this.add.text(400, 300, '→', {
@@ -4148,6 +4436,7 @@ class GameScene extends Phaser.Scene {
             bg.destroy();
             titleText.destroy();
             oldSprite.destroy();
+            oldNameText.destroy();
             arrow.destroy();
             newSprite.destroy();
             newNameText.destroy();
@@ -4219,7 +4508,7 @@ class GameOverScene extends Phaser.Scene {
 const config = {
     type: Phaser.AUTO, width: 800, height: 600,
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
-    scene: [BootScene, StartScreen, GameScene, GameOverScene, AlbumScene, ShopScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, DudeRun, DudeDodge, DudeJump, KaeppchenCollect, KaeppchenMaze, KaeppchenDodge, KaeppchenDeliver, EdgarRoll, EdgarBounce, EdgarGoal, EdgarDodge, BossGame, BoxingBoss, SwaggyBoss, KaeppchenBoss, EdgarBoss]
+    scene: [BootScene, StartScreen, GameScene, GameOverScene, AlbumScene, ShopScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, ZobelSneeze, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, SwaggyJump, DudeRun, DudeDodge, DudeJump, DudeSlide, KaeppchenCollect, KaeppchenMaze, KaeppchenDodge, KaeppchenDeliver, KaeppchenPick, EdgarRoll, EdgarBounce, EdgarGoal, EdgarDodge, EdgarPinball, BossGame, BoxingBoss, SwaggyBoss, KaeppchenBoss, EdgarBoss]
 };
 const game = new Phaser.Game(config);
 </script>
