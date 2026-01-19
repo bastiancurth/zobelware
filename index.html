@@ -2528,7 +2528,7 @@ class ZobelSneeze extends BaseMicrogame {
         // Nüsse die fallen
         this.nuts = [];
         this.caught = 0;
-        this.target = 5;
+        this.target = 3;
         this.counterText = this.add.text(400, 80, '0/' + this.target, { font: 'bold 32px Orbitron', fill: '#8B4513' }).setOrigin(0.5);
 
         this.spawnTimer = this.time.addEvent({
@@ -2575,18 +2575,18 @@ class SwaggyJump extends BaseMicrogame {
         this.cameras.main.setBackgroundColor('#006994');
         this.add.text(400, 30, 'Spring zum Ziel! SPACE', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
-        // Plattformen
+        // Plattformen - erste länger, Rest nach rechts
         this.platforms = [
-            this.add.rectangle(80, 500, 120, 20, 0x2ecc71),
-            this.add.rectangle(250, 420, 100, 20, 0x2ecc71),
-            this.add.rectangle(420, 340, 100, 20, 0x2ecc71),
-            this.add.rectangle(600, 260, 100, 20, 0x2ecc71),
-            this.add.rectangle(720, 150, 120, 20, 0xFFD700)
+            this.add.rectangle(120, 500, 200, 20, 0x2ecc71),
+            this.add.rectangle(320, 420, 100, 20, 0x2ecc71),
+            this.add.rectangle(480, 340, 100, 20, 0x2ecc71),
+            this.add.rectangle(620, 260, 100, 20, 0x2ecc71),
+            this.add.rectangle(720, 180, 120, 20, 0xFFD700)
         ];
-        this.add.text(720, 130, '⭐', { font: '24px Arial' }).setOrigin(0.5);
+        this.add.text(720, 160, '⭐', { font: '24px Arial' }).setOrigin(0.5);
 
-        // Swaggy
-        this.swaggyX = 80; this.swaggyY = 470;
+        // Swaggy - startet weiter links auf der langen Plattform
+        this.swaggyX = 50; this.swaggyY = 470;
         this.velY = 0; this.onGround = true; this.currentPlatform = 0;
         if (this.textures.exists('swaggy')) {
             this.swaggy = this.add.image(this.swaggyX, this.swaggyY, 'swaggy').setScale(0.06);
@@ -2633,28 +2633,30 @@ class DudeSlide extends BaseMicrogame {
         this.cameras.main.setBackgroundColor('#1a1a2e');
         this.add.text(400, 30, 'Rutsche runter! ← →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
-        // Trashi
-        this.dudeX = 400; this.dudeY = 100;
+        // Trashi - startet höher für mehr Reaktionszeit
+        this.dudeX = 400; this.dudeY = 80;
         if (this.textures.exists('dude')) {
             this.dude = this.add.sprite(this.dudeX, this.dudeY, 'dude', 4).setScale(2.5);
         } else {
             this.dude = this.add.rectangle(this.dudeX, this.dudeY, 30, 45, 0x4169E1);
         }
 
-        // Hindernisse
+        // Hindernisse - erste Reihe leer, danach weniger dichte Hindernisse
         this.obstacles = [];
-        for (let row = 0; row < 4; row++) {
-            const y = 200 + row * 100;
-            const numObs = Phaser.Math.Between(2, 4);
-            const positions = Phaser.Utils.Array.Shuffle([100, 250, 400, 550, 700]).slice(0, numObs);
+        // Keine Hindernisse in den ersten 150 Pixeln (Startzone)
+        for (let row = 0; row < 3; row++) {
+            const y = 280 + row * 90;
+            // Hindernisse mit Lücken, garantiert durchquerbar
+            const numObs = 2;
+            const positions = Phaser.Utils.Array.Shuffle([120, 280, 400, 520, 680]).slice(0, numObs);
             positions.forEach(x => {
-                const obs = this.add.rectangle(x, y, 60, 20, 0xff6b6b);
+                const obs = this.add.rectangle(x, y, 50, 15, 0xff6b6b);
                 this.obstacles.push(obs);
             });
         }
 
         // Ziel
-        this.goal = this.add.rectangle(400, 550, 200, 30, 0x00ff88);
+        this.goal = this.add.rectangle(400, 550, 250, 30, 0x00ff88);
         this.add.text(400, 550, 'ZIEL', { font: 'bold 14px Orbitron', fill: '#000' }).setOrigin(0.5);
 
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -2695,13 +2697,13 @@ class KaeppchenPick extends BaseMicrogame {
         this.add.text(400, 30, 'Pflücke die roten Blumen! Klick', { font: '16px Orbitron', fill: '#000' }).setOrigin(0.5);
 
         this.picked = 0;
-        this.target = 5;
+        this.target = 2;
         this.counterText = this.add.text(400, 70, '0/' + this.target, { font: 'bold 28px Orbitron', fill: '#E63946' }).setOrigin(0.5);
 
-        // Blumen spawnen
+        // Blumen spawnen - weniger insgesamt
         this.flowers = [];
-        for (let i = 0; i < 15; i++) {
-            const isRed = i < 5;
+        for (let i = 0; i < 8; i++) {
+            const isRed = i < 2;
             const flower = this.add.text(
                 Phaser.Math.Between(60, 740),
                 Phaser.Math.Between(120, 520),
@@ -2749,11 +2751,11 @@ class EdgarPinball extends BaseMicrogame {
             this.edgar = this.add.circle(this.edgarX, this.edgarY, 20, 0x9B59B6);
         }
 
-        // Bumper
+        // Bumper - nur 3
         this.bumpers = [];
         this.bumperHit = 0;
-        this.target = 5;
-        const positions = [[200, 200], [400, 150], [600, 200], [300, 350], [500, 350]];
+        this.target = 3;
+        const positions = [[200, 220], [400, 150], [600, 220]];
         positions.forEach(p => {
             const b = this.add.circle(p[0], p[1], 25, 0xFFD700);
             b.setStrokeStyle(3, 0xffffff);
