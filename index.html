@@ -567,10 +567,10 @@ class BaseMicrogame extends Phaser.Scene {
         this.wasd = this.input.keyboard.addKeys({ w: 'W', a: 'A', s: 'S', d: 'D' });
     }
     // Helper für Pfeiltasten + WASD
-    isLeft() { return (this.cursors && this.isLeft()) || (this.wasd && this.wasd.a.isDown); }
-    isRight() { return (this.cursors && this.isRight()) || (this.wasd && this.wasd.d.isDown); }
-    isUp() { return (this.cursors && this.isUp()) || (this.wasd && this.wasd.w.isDown); }
-    isDown() { return (this.cursors && this.isDown()) || (this.wasd && this.wasd.s.isDown); }
+    isLeft() { return (this.cursors && this.cursors.left.isDown) || (this.wasd && this.wasd.a.isDown); }
+    isRight() { return (this.cursors && this.cursors.right.isDown) || (this.wasd && this.wasd.d.isDown); }
+    isUp() { return (this.cursors && this.cursors.up.isDown) || (this.wasd && this.wasd.w.isDown); }
+    isDown() { return (this.cursors && this.cursors.down.isDown) || (this.wasd && this.wasd.s.isDown); }
     startTimer() { this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.lose(); }); }
     startSurvivalTimer() { this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.win(); }); }
     update() {
