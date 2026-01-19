@@ -309,7 +309,7 @@ const Zobel = {
 const CharacterManager = {
     currentCharacter: 'zobel',
     characterIndex: 0,
-    characters: ['zobel', 'swaggy', 'dude'],
+    characters: ['zobel', 'swaggy', 'dude', 'kaeppchen', 'edgar'],
 
     // Charakter-Definitionen
     data: {
@@ -373,6 +373,48 @@ const CharacterManager = {
                 { key: 'MathQuiz', name: 'MATHE!', duration: 4000, keys: '← →', music: 'puzzle' }
             ],
             boss: { key: 'BoxingBoss', name: 'BOXING BOSS!' }
+        },
+        kaeppchen: {
+            name: 'Käppchen',
+            color: 0xE63946,  // Rot wie Rotkäppchen
+            image: 'kaeppchen',
+            scale: 1.5,  // 37x64 Spritesheet
+            isTopDown: true,  // Top-Down Perspektive
+            jingleNotes: [659.25, 783.99, 880, 783.99, 659.25, 523.25],
+            games: [
+                { key: 'KaeppchenCollect', name: 'SAMMELN!', duration: 5000, keys: '← ↑ → ↓', music: 'happy' },
+                { key: 'KaeppchenMaze', name: 'LABYRINTH!', duration: 6000, keys: '← ↑ → ↓', music: 'tense' },
+                { key: 'KaeppchenDodge', name: 'AUSWEICHEN!', duration: 4000, keys: '← ↑ → ↓', music: 'action' },
+                { key: 'KaeppchenDeliver', name: 'LIEFERN!', duration: 5000, keys: '← ↑ → ↓', music: 'rush' },
+                { key: 'ColorMatch', name: 'FARBEN!', duration: 3500, keys: '🖱️ KLICK', music: 'happy' },
+                { key: 'MemoryClick', name: 'MERKEN!', duration: 6000, keys: '🖱️ KLICK', music: 'calm' },
+                { key: 'SpotTheOdd', name: 'FINDE!', duration: 4000, keys: '🖱️ KLICK', music: 'puzzle' },
+                { key: 'StopWatch', name: 'STOPPUHR!', duration: 4000, keys: 'SPACE', music: 'calm' },
+                { key: 'ClickTheButton', name: 'KLICK!', duration: 3000, keys: '🖱️ KLICK', music: 'action' },
+                { key: 'DontPress', name: 'NICHT!', duration: 3000, keys: '🚫 WARTE', music: 'tense' }
+            ],
+            boss: { key: 'KaeppchenBoss', name: 'WOLF BOSS!' }
+        },
+        edgar: {
+            name: 'Edgar',
+            color: 0x9B59B6,  // Lila für den Ball
+            image: 'edgar',
+            scale: 2.5,  // 32x32 Ball, vergrößert
+            isBall: true,  // Rotiert bei Bewegung
+            jingleNotes: [440, 523.25, 659.25, 880, 659.25, 523.25],
+            games: [
+                { key: 'EdgarRoll', name: 'ROLLEN!', duration: 4000, keys: '← →', music: 'action' },
+                { key: 'EdgarBounce', name: 'HÜPFEN!', duration: 4000, keys: 'SPACE', music: 'happy' },
+                { key: 'EdgarGoal', name: 'TOR!', duration: 5000, keys: '← ↑ → ↓', music: 'rush' },
+                { key: 'EdgarDodge', name: 'AUSWEICHEN!', duration: 4000, keys: '← →', music: 'tense' },
+                { key: 'PumpTheBalloon', name: 'PUMPEN!', duration: 4000, keys: '← →', music: 'rush' },
+                { key: 'StopTheBar', name: 'STOPP!', duration: 4000, keys: 'SPACE', music: 'calm' },
+                { key: 'HitTheTarget', name: 'TREFFEN!', duration: 3000, keys: '🖱️ KLICK', music: 'action' },
+                { key: 'FastClicker', name: 'SCHNELL!', duration: 3500, keys: '🖱️ KLICK', music: 'rush' },
+                { key: 'MashTheKey', name: 'HÄMMERN!', duration: 3500, keys: '⌨️ ALLE', music: 'rush' },
+                { key: 'MathQuiz', name: 'MATHE!', duration: 4000, keys: '← →', music: 'puzzle' }
+            ],
+            boss: { key: 'EdgarBoss', name: 'EDGAR BOSS!' }
         }
     },
 
@@ -1581,85 +1623,57 @@ class DudeRun extends BaseMicrogame {
         super.create();
         this.cameras.main.setBackgroundColor('#87CEEB');
         this.distance = 0;
-        this.targetDistance = 100;
+        this.targetDistance = 50;
 
         // Boden
         this.add.rectangle(400, 550, 800, 100, 0x654321);
-        this.add.rectangle(400, 510, 800, 20, 0x228B22); // Gras höher
+        this.add.rectangle(400, 510, 800, 20, 0x228B22);
 
-        this.add.text(400, 30, 'Laufe nach rechts! →', { font: '18px Orbitron', fill: '#000' }).setOrigin(0.5);
-        this.distanceText = this.add.text(400, 60, '0m', { font: 'bold 24px Orbitron', fill: '#4169E1' }).setOrigin(0.5);
+        // Hintergrund-Bäume für Bewegungseffekt
+        this.trees = [];
+        for (let i = 0; i < 5; i++) {
+            const tree = this.add.rectangle(i * 200, 450, 20, 60, 0x228B22);
+            this.trees.push(tree);
+        }
 
-        // Trashi - höher positioniert
+        this.add.text(400, 30, 'Laufe nach rechts! → gedrückt halten', { font: '16px Orbitron', fill: '#000' }).setOrigin(0.5);
+        this.distanceText = this.add.text(400, 60, '0 / 50m', { font: 'bold 24px Orbitron', fill: '#4169E1' }).setOrigin(0.5);
+
+        // Trashi
         this.groundY = 430;
-        this.dudeX = 100;
+        this.dudeX = 150;
         if (this.textures.exists('dude')) {
             this.dude = this.add.sprite(this.dudeX, this.groundY, 'dude', 4).setScale(3.0);
         } else {
             this.dude = this.add.rectangle(this.dudeX, this.groundY, 30, 50, 0x4169E1);
         }
 
-        // Hindernisse - auch höher
-        this.obstacles = [];
-        for (let i = 0; i < 3; i++) {
-            const obs = this.add.rectangle(300 + i * 200, this.groundY + 10, 30, 60, 0x8B0000);
-            this.obstacles.push(obs);
-        }
-
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.isJumping = false;
-        this.dudeVY = 0;
-
-        this.input.keyboard.on('keydown-SPACE', () => {
-            if (!this.isJumping && !this.hasEnded) {
-                this.isJumping = true;
-                this.dudeVY = -15;
-                if (this.dude.play) this.dude.play('dude_idle');
-            }
-        });
-
         this.startTimer();
     }
 
     update() {
+        super.update();
         if (this.hasEnded) return;
 
-        // Laufen
+        // Laufen - schneller!
         if (this.cursors.right.isDown) {
-            this.distance += 0.5;
-            this.distanceText.setText(Math.floor(this.distance) + 'm');
-            if (this.dude.play && !this.isJumping) this.dude.play('dude_right', true);
+            this.distance += 1.0;
+            this.distanceText.setText(Math.floor(this.distance) + ' / ' + this.targetDistance + 'm');
+            if (this.dude.play) this.dude.play('dude_right', true);
 
-            // Hindernisse bewegen sich relativ zum Spieler
-            this.obstacles.forEach(obs => {
-                obs.x -= 3;
-                if (obs.x < -50) obs.x = 850;
+            // Bäume bewegen sich für Bewegungseffekt
+            this.trees.forEach(tree => {
+                tree.x -= 8;
+                if (tree.x < -30) tree.x = 830;
             });
 
             if (this.distance >= this.targetDistance) {
                 this.win();
             }
-        } else if (!this.isJumping && this.dude.play) {
+        } else if (this.dude.play) {
             this.dude.play('dude_idle', true);
         }
-
-        // Springen
-        if (this.isJumping) {
-            this.dudeVY += 0.8;
-            this.dude.y += this.dudeVY;
-            if (this.dude.y >= this.groundY) {
-                this.dude.y = this.groundY;
-                this.isJumping = false;
-                this.dudeVY = 0;
-            }
-        }
-
-        // Kollision
-        this.obstacles.forEach(obs => {
-            if (Math.abs(obs.x - this.dudeX) < 30 && this.dude.y > 450) {
-                this.cameras.main.shake(100, 0.02);
-            }
-        });
     }
 }
 
@@ -1755,7 +1769,7 @@ class DudeJump extends BaseMicrogame {
         this.add.rectangle(400, 510, 800, 20, 0x228B22); // Gras
         this.add.text(400, 30, 'Spring über das Hindernis! SPACE', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
-        // Trashi - höher positioniert
+        // Trashi - steht auf dem Boden
         this.groundY = 430;
         this.dudeY = this.groundY;
         if (this.textures.exists('dude')) {
@@ -1764,8 +1778,8 @@ class DudeJump extends BaseMicrogame {
             this.dude = this.add.rectangle(200, this.dudeY, 30, 50, 0x4169E1);
         }
 
-        // Hindernis kommt von rechts - auch höher
-        this.obstacle = this.add.rectangle(850, this.groundY + 10, 40, 50, 0xff6b6b);
+        // Hindernis auf dem Boden (Höhe 50, Boden bei y=500)
+        this.obstacle = this.add.rectangle(850, 475, 40, 50, 0xff6b6b);
         this.obstacleSpeed = 6;
 
         this.isJumping = false;
@@ -1824,6 +1838,585 @@ class DudeJump extends BaseMicrogame {
         // Hindernis durch
         if (this.obstacle.x < -50) {
             this.obstacle.x = 850;
+        }
+    }
+}
+
+// KÄPPCHEN GAMES (Top-Down)
+class KaeppchenCollect extends BaseMicrogame {
+    constructor() { super({ key: 'KaeppchenCollect' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#228B22');
+        this.collected = 0;
+        this.target = 5;
+
+        this.add.text(400, 30, 'Sammle 5 Äpfel!', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.collectText = this.add.text(400, 60, '0 / 5', { font: 'bold 24px Orbitron', fill: '#E63946' }).setOrigin(0.5);
+
+        // Käppchen
+        this.playerX = 400;
+        this.playerY = 300;
+        if (this.textures.exists('kaeppchen')) {
+            this.player = this.add.sprite(this.playerX, this.playerY, 'kaeppchen', 0).setScale(1.5);
+        } else {
+            this.player = this.add.circle(this.playerX, this.playerY, 20, 0xE63946);
+        }
+
+        // Äpfel verteilt
+        this.apples = [];
+        for (let i = 0; i < 8; i++) {
+            const apple = this.add.circle(
+                Phaser.Math.Between(80, 720),
+                Phaser.Math.Between(100, 500),
+                12, 0xff0000
+            );
+            apple.collected = false;
+            this.apples.push(apple);
+        }
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        const speed = 5;
+        let moving = false;
+        if (this.cursors.left.isDown) {
+            this.playerX -= speed;
+            if (this.player.play) this.player.play('kaeppchen_left', true);
+            moving = true;
+        } else if (this.cursors.right.isDown) {
+            this.playerX += speed;
+            if (this.player.play) this.player.play('kaeppchen_right', true);
+            moving = true;
+        } else if (this.cursors.up.isDown) {
+            this.playerY -= speed;
+            if (this.player.play) this.player.play('kaeppchen_up', true);
+            moving = true;
+        } else if (this.cursors.down.isDown) {
+            this.playerY += speed;
+            if (this.player.play) this.player.play('kaeppchen_down', true);
+            moving = true;
+        }
+
+        if (!moving && this.player.play) {
+            this.player.play('kaeppchen_idle', true);
+        }
+
+        this.playerX = Phaser.Math.Clamp(this.playerX, 40, 760);
+        this.playerY = Phaser.Math.Clamp(this.playerY, 80, 540);
+        this.player.x = this.playerX;
+        this.player.y = this.playerY;
+
+        // Äpfel sammeln
+        this.apples.forEach(apple => {
+            if (!apple.collected && Phaser.Math.Distance.Between(this.playerX, this.playerY, apple.x, apple.y) < 30) {
+                apple.collected = true;
+                apple.destroy();
+                this.collected++;
+                this.collectText.setText(this.collected + ' / ' + this.target);
+                musicEngine.playSFX('click');
+                if (this.collected >= this.target) this.win();
+            }
+        });
+    }
+}
+
+class KaeppchenMaze extends BaseMicrogame {
+    constructor() { super({ key: 'KaeppchenMaze' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#2d5a27');
+
+        this.add.text(400, 20, 'Erreiche das Ziel!', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Einfache Wände
+        this.walls = [];
+        const wallPositions = [
+            [200, 150, 300, 20], [500, 250, 20, 200], [300, 400, 250, 20],
+            [150, 300, 20, 150], [600, 150, 20, 150]
+        ];
+        wallPositions.forEach(w => {
+            const wall = this.add.rectangle(w[0], w[1], w[2], w[3], 0x4a3728);
+            this.walls.push(wall);
+        });
+
+        // Käppchen Start
+        this.playerX = 80;
+        this.playerY = 500;
+        if (this.textures.exists('kaeppchen')) {
+            this.player = this.add.sprite(this.playerX, this.playerY, 'kaeppchen', 0).setScale(1.2);
+        } else {
+            this.player = this.add.circle(this.playerX, this.playerY, 15, 0xE63946);
+        }
+
+        // Ziel (Omas Haus)
+        this.goal = this.add.rectangle(720, 80, 50, 50, 0xFFD700);
+        this.add.text(720, 80, '🏠', { font: '24px Arial' }).setOrigin(0.5);
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        const speed = 4;
+        let newX = this.playerX;
+        let newY = this.playerY;
+
+        if (this.cursors.left.isDown) {
+            newX -= speed;
+            if (this.player.play) this.player.play('kaeppchen_left', true);
+        } else if (this.cursors.right.isDown) {
+            newX += speed;
+            if (this.player.play) this.player.play('kaeppchen_right', true);
+        } else if (this.cursors.up.isDown) {
+            newY -= speed;
+            if (this.player.play) this.player.play('kaeppchen_up', true);
+        } else if (this.cursors.down.isDown) {
+            newY += speed;
+            if (this.player.play) this.player.play('kaeppchen_down', true);
+        }
+
+        // Kollision mit Wänden prüfen
+        let canMove = true;
+        this.walls.forEach(wall => {
+            if (newX > wall.x - wall.width/2 - 15 && newX < wall.x + wall.width/2 + 15 &&
+                newY > wall.y - wall.height/2 - 15 && newY < wall.y + wall.height/2 + 15) {
+                canMove = false;
+            }
+        });
+
+        if (canMove) {
+            this.playerX = Phaser.Math.Clamp(newX, 30, 770);
+            this.playerY = Phaser.Math.Clamp(newY, 50, 540);
+        }
+
+        this.player.x = this.playerX;
+        this.player.y = this.playerY;
+
+        // Ziel erreicht?
+        if (Phaser.Math.Distance.Between(this.playerX, this.playerY, 720, 80) < 40) {
+            this.win();
+        }
+    }
+}
+
+class KaeppchenDodge extends BaseMicrogame {
+    constructor() { super({ key: 'KaeppchenDodge' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a3d1a');
+
+        this.add.text(400, 30, 'Weiche den Wölfen aus!', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Käppchen
+        this.playerX = 400;
+        this.playerY = 300;
+        if (this.textures.exists('kaeppchen')) {
+            this.player = this.add.sprite(this.playerX, this.playerY, 'kaeppchen', 0).setScale(1.5);
+        } else {
+            this.player = this.add.circle(this.playerX, this.playerY, 20, 0xE63946);
+        }
+
+        // Wölfe spawnen
+        this.wolves = [];
+        this.spawnTimer = this.time.addEvent({
+            delay: 600,
+            callback: () => {
+                if (this.hasEnded) return;
+                const side = Phaser.Math.Between(0, 3);
+                let x, y, vx = 0, vy = 0;
+                if (side === 0) { x = -20; y = Phaser.Math.Between(100, 500); vx = 4; }
+                else if (side === 1) { x = 820; y = Phaser.Math.Between(100, 500); vx = -4; }
+                else if (side === 2) { x = Phaser.Math.Between(100, 700); y = -20; vy = 4; }
+                else { x = Phaser.Math.Between(100, 700); y = 620; vy = -4; }
+                const wolf = this.add.circle(x, y, 15, 0x444444);
+                wolf.vx = vx; wolf.vy = vy;
+                this.wolves.push(wolf);
+            },
+            loop: true
+        });
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        const speed = 5;
+        if (this.cursors.left.isDown) {
+            this.playerX -= speed;
+            if (this.player.play) this.player.play('kaeppchen_left', true);
+        } else if (this.cursors.right.isDown) {
+            this.playerX += speed;
+            if (this.player.play) this.player.play('kaeppchen_right', true);
+        } else if (this.cursors.up.isDown) {
+            this.playerY -= speed;
+            if (this.player.play) this.player.play('kaeppchen_up', true);
+        } else if (this.cursors.down.isDown) {
+            this.playerY += speed;
+            if (this.player.play) this.player.play('kaeppchen_down', true);
+        }
+
+        this.playerX = Phaser.Math.Clamp(this.playerX, 30, 770);
+        this.playerY = Phaser.Math.Clamp(this.playerY, 60, 540);
+        this.player.x = this.playerX;
+        this.player.y = this.playerY;
+
+        // Wölfe bewegen
+        this.wolves.forEach(wolf => {
+            wolf.x += wolf.vx;
+            wolf.y += wolf.vy;
+            if (Phaser.Math.Distance.Between(this.playerX, this.playerY, wolf.x, wolf.y) < 30) {
+                this.lose();
+            }
+        });
+    }
+}
+
+class KaeppchenDeliver extends BaseMicrogame {
+    constructor() { super({ key: 'KaeppchenDeliver' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#3d6b3d');
+
+        this.add.text(400, 30, 'Bring den Korb zu Oma!', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Omas Haus oben rechts
+        this.add.rectangle(700, 100, 80, 80, 0x8B4513);
+        this.add.text(700, 100, '🏠', { font: '32px Arial' }).setOrigin(0.5);
+        this.goalX = 700; this.goalY = 100;
+
+        // Käppchen unten links
+        this.playerX = 100;
+        this.playerY = 500;
+        if (this.textures.exists('kaeppchen')) {
+            this.player = this.add.sprite(this.playerX, this.playerY, 'kaeppchen', 0).setScale(1.5);
+        } else {
+            this.player = this.add.circle(this.playerX, this.playerY, 20, 0xE63946);
+        }
+
+        // Korb-Symbol folgt Käppchen
+        this.basket = this.add.text(this.playerX + 20, this.playerY, '🧺', { font: '16px Arial' });
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        const speed = 6;
+        if (this.cursors.left.isDown) {
+            this.playerX -= speed;
+            if (this.player.play) this.player.play('kaeppchen_left', true);
+        } else if (this.cursors.right.isDown) {
+            this.playerX += speed;
+            if (this.player.play) this.player.play('kaeppchen_right', true);
+        } else if (this.cursors.up.isDown) {
+            this.playerY -= speed;
+            if (this.player.play) this.player.play('kaeppchen_up', true);
+        } else if (this.cursors.down.isDown) {
+            this.playerY += speed;
+            if (this.player.play) this.player.play('kaeppchen_down', true);
+        }
+
+        this.playerX = Phaser.Math.Clamp(this.playerX, 30, 770);
+        this.playerY = Phaser.Math.Clamp(this.playerY, 60, 540);
+        this.player.x = this.playerX;
+        this.player.y = this.playerY;
+        this.basket.x = this.playerX + 20;
+        this.basket.y = this.playerY;
+
+        // Bei Oma angekommen?
+        if (Phaser.Math.Distance.Between(this.playerX, this.playerY, this.goalX, this.goalY) < 50) {
+            this.win();
+        }
+    }
+}
+
+// EDGAR GAMES (Ball mit Rotation)
+class EdgarRoll extends BaseMicrogame {
+    constructor() { super({ key: 'EdgarRoll' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#4a69bd');
+        this.distance = 0;
+        this.target = 100;
+
+        this.add.rectangle(400, 550, 800, 100, 0x2d3436);
+        this.add.text(400, 30, 'Roll nach rechts! →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.progressText = this.add.text(400, 60, '0%', { font: 'bold 24px Orbitron', fill: '#9B59B6' }).setOrigin(0.5);
+
+        // Edgar Ball
+        this.edgarX = 100;
+        if (this.textures.exists('edgar')) {
+            this.edgar = this.add.image(this.edgarX, 480, 'edgar').setScale(2.5);
+        } else {
+            this.edgar = this.add.circle(this.edgarX, 480, 25, 0x9B59B6);
+        }
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        if (this.cursors.right.isDown) {
+            this.distance += 1;
+            this.edgarX = Math.min(this.edgarX + 4, 700);
+            this.edgar.x = this.edgarX;
+            this.edgar.angle += 10; // Rotation!
+            this.progressText.setText(Math.min(100, Math.floor(this.distance)) + '%');
+
+            if (this.distance >= this.target) this.win();
+        }
+    }
+}
+
+class EdgarBounce extends BaseMicrogame {
+    constructor() { super({ key: 'EdgarBounce' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#34495e');
+        this.bounces = 0;
+        this.target = 3;
+
+        this.add.text(400, 30, 'Hüpfe 3x! SPACE', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.bounceText = this.add.text(400, 60, '0 / 3', { font: 'bold 24px Orbitron', fill: '#9B59B6' }).setOrigin(0.5);
+
+        // Plattformen
+        this.platforms = [
+            this.add.rectangle(150, 450, 100, 20, 0x7f8c8d),
+            this.add.rectangle(400, 350, 100, 20, 0x7f8c8d),
+            this.add.rectangle(650, 250, 100, 20, 0x7f8c8d)
+        ];
+
+        // Boden
+        this.add.rectangle(400, 550, 800, 40, 0x2d3436);
+
+        // Edgar
+        this.edgarX = 150;
+        this.edgarY = 400;
+        this.velocityY = 0;
+        this.onGround = true;
+
+        if (this.textures.exists('edgar')) {
+            this.edgar = this.add.image(this.edgarX, this.edgarY, 'edgar').setScale(2.0);
+        } else {
+            this.edgar = this.add.circle(this.edgarX, this.edgarY, 20, 0x9B59B6);
+        }
+
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (this.onGround && !this.hasEnded) {
+                this.velocityY = -15;
+                this.onGround = false;
+            }
+        });
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        // Horizontale Bewegung
+        if (this.cursors.left.isDown) {
+            this.edgarX -= 4;
+            this.edgar.angle -= 5;
+        } else if (this.cursors.right.isDown) {
+            this.edgarX += 4;
+            this.edgar.angle += 5;
+        }
+        this.edgarX = Phaser.Math.Clamp(this.edgarX, 30, 770);
+
+        // Schwerkraft
+        this.velocityY += 0.8;
+        this.edgarY += this.velocityY;
+
+        // Boden-Check
+        if (this.edgarY >= 510) {
+            this.edgarY = 510;
+            this.velocityY = 0;
+            this.onGround = true;
+        }
+
+        // Plattform-Check
+        this.platforms.forEach((plat, idx) => {
+            if (this.velocityY > 0 &&
+                this.edgarX > plat.x - 60 && this.edgarX < plat.x + 60 &&
+                this.edgarY > plat.y - 30 && this.edgarY < plat.y + 10) {
+                this.edgarY = plat.y - 20;
+                this.velocityY = 0;
+                this.onGround = true;
+                // Zähle als Bounce wenn neue Plattform
+                if (!plat.bounced) {
+                    plat.bounced = true;
+                    this.bounces++;
+                    this.bounceText.setText(this.bounces + ' / ' + this.target);
+                    musicEngine.playSFX('click');
+                    if (this.bounces >= this.target) this.win();
+                }
+            }
+        });
+
+        this.edgar.x = this.edgarX;
+        this.edgar.y = this.edgarY;
+    }
+}
+
+class EdgarGoal extends BaseMicrogame {
+    constructor() { super({ key: 'EdgarGoal' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#27ae60');
+
+        this.add.text(400, 30, 'Schieß ins Tor!', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Tor oben
+        this.add.rectangle(400, 80, 150, 60, 0xffffff, 0.3);
+        this.add.rectangle(400, 80, 150, 60).setStrokeStyle(4, 0xffffff);
+
+        // Edgar
+        this.edgarX = 400;
+        this.edgarY = 450;
+        this.velocityX = 0;
+        this.velocityY = 0;
+        this.kicked = false;
+
+        if (this.textures.exists('edgar')) {
+            this.edgar = this.add.image(this.edgarX, this.edgarY, 'edgar').setScale(2.5);
+        } else {
+            this.edgar = this.add.circle(this.edgarX, this.edgarY, 25, 0x9B59B6);
+        }
+
+        // Ziel-Pfeil
+        this.arrow = this.add.triangle(this.edgarX, this.edgarY - 50, 0, 20, 10, 0, 20, 20, 0x00ff00);
+        this.arrowAngle = -90;
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (!this.kicked && !this.hasEnded) {
+                this.kicked = true;
+                const rad = this.arrowAngle * Math.PI / 180;
+                this.velocityX = Math.cos(rad) * 12;
+                this.velocityY = Math.sin(rad) * 12;
+                this.arrow.visible = false;
+            }
+        });
+
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        if (!this.kicked) {
+            // Pfeil bewegen
+            if (this.cursors.left.isDown) this.arrowAngle -= 3;
+            if (this.cursors.right.isDown) this.arrowAngle += 3;
+            this.arrowAngle = Phaser.Math.Clamp(this.arrowAngle, -150, -30);
+
+            const rad = this.arrowAngle * Math.PI / 180;
+            this.arrow.x = this.edgarX + Math.cos(rad) * 50;
+            this.arrow.y = this.edgarY + Math.sin(rad) * 50;
+            this.arrow.angle = this.arrowAngle + 90;
+        } else {
+            // Ball bewegt sich
+            this.edgarX += this.velocityX;
+            this.edgarY += this.velocityY;
+            this.edgar.x = this.edgarX;
+            this.edgar.y = this.edgarY;
+            this.edgar.angle += this.velocityX * 2;
+
+            // Tor getroffen?
+            if (this.edgarY < 110 && this.edgarX > 325 && this.edgarX < 475) {
+                this.win();
+            }
+
+            // Daneben?
+            if (this.edgarY < 50 || this.edgarX < 0 || this.edgarX > 800) {
+                this.lose();
+            }
+        }
+    }
+}
+
+class EdgarDodge extends BaseMicrogame {
+    constructor() { super({ key: 'EdgarDodge' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#2c3e50');
+
+        this.add.rectangle(400, 550, 800, 60, 0x34495e);
+        this.add.text(400, 30, 'Weiche aus! ← →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+
+        // Edgar
+        this.edgarX = 400;
+        if (this.textures.exists('edgar')) {
+            this.edgar = this.add.image(this.edgarX, 490, 'edgar').setScale(2.5);
+        } else {
+            this.edgar = this.add.circle(this.edgarX, 490, 25, 0x9B59B6);
+        }
+
+        // Fallende Objekte
+        this.obstacles = [];
+        this.spawnTimer = this.time.addEvent({
+            delay: 400,
+            callback: () => {
+                if (this.hasEnded) return;
+                const obs = this.add.rectangle(
+                    Phaser.Math.Between(50, 750), -20,
+                    30, 30, 0xe74c3c
+                );
+                obs.vy = Phaser.Math.Between(5, 9);
+                this.obstacles.push(obs);
+            },
+            loop: true
+        });
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        const speed = 7;
+        if (this.cursors.left.isDown) {
+            this.edgarX -= speed;
+            this.edgar.angle -= 8;
+        } else if (this.cursors.right.isDown) {
+            this.edgarX += speed;
+            this.edgar.angle += 8;
+        }
+
+        this.edgarX = Phaser.Math.Clamp(this.edgarX, 40, 760);
+        this.edgar.x = this.edgarX;
+
+        // Hindernisse bewegen
+        for (let i = this.obstacles.length - 1; i >= 0; i--) {
+            const obs = this.obstacles[i];
+            obs.y += obs.vy;
+
+            if (obs.y > 600) {
+                obs.destroy();
+                this.obstacles.splice(i, 1);
+                continue;
+            }
+
+            if (Math.abs(obs.x - this.edgarX) < 35 && obs.y > 450 && obs.y < 520) {
+                this.lose();
+            }
         }
     }
 }
@@ -2249,6 +2842,298 @@ class SwaggyBoss extends BaseMicrogame {
     }
 }
 
+// Käppchen Boss - Der böse Wolf
+class KaeppchenBoss extends BaseMicrogame {
+    constructor() { super({ key: 'KaeppchenBoss' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a3d1a');
+
+        this.add.text(400, 30, 'WOLF BOSS!', { font: 'bold 34px Orbitron', fill: '#E63946' }).setOrigin(0.5);
+        this.add.text(400, 560, '← ↑ → ↓ Ausweichen | Sammle Äpfel zum Werfen!', { font: '12px Orbitron', fill: '#888' }).setOrigin(0.5);
+
+        // Käppchen
+        this.playerX = 100;
+        this.playerY = 300;
+        if (this.textures.exists('kaeppchen')) {
+            this.player = this.add.sprite(this.playerX, this.playerY, 'kaeppchen', 0).setScale(1.5);
+        } else {
+            this.player = this.add.circle(this.playerX, this.playerY, 20, 0xE63946);
+        }
+
+        // Wolf Boss rechts
+        this.bossX = 650;
+        this.bossY = 300;
+        this.boss = this.add.container(this.bossX, this.bossY);
+        const wolfBody = this.add.graphics();
+        wolfBody.fillStyle(0x444444, 1);
+        wolfBody.fillEllipse(0, 0, 100, 60);
+        wolfBody.fillTriangle(-50, -10, -80, -30, -50, 10);  // Schnauze
+        wolfBody.fillTriangle(-10, -30, 0, -50, 10, -30);  // Ohr links
+        wolfBody.fillTriangle(20, -30, 30, -50, 40, -30);  // Ohr rechts
+        wolfBody.fillStyle(0xff0000, 1);
+        wolfBody.fillCircle(-40, -5, 5);  // Auge
+        this.boss.add(wolfBody);
+
+        this.bossMaxHealth = 5;
+        this.bossHealth = this.bossMaxHealth;
+        this.bossVY = 2;
+
+        // Health Bar
+        this.healthBar = this.add.graphics();
+        this.updateHealthBar();
+
+        // Äpfel zum Aufsammeln und Werfen
+        this.apples = [];
+        this.playerApples = 0;
+        this.appleText = this.add.text(100, 560, 'Äpfel: 0', { font: '14px Orbitron', fill: '#ff0000' });
+
+        // Äpfel spawnen
+        this.time.addEvent({
+            delay: 2000,
+            callback: () => {
+                if (this.hasEnded) return;
+                const apple = this.add.circle(
+                    Phaser.Math.Between(50, 350),
+                    Phaser.Math.Between(100, 500),
+                    10, 0xff0000
+                );
+                this.apples.push(apple);
+            },
+            loop: true
+        });
+
+        // Wolf greift an
+        this.attacks = [];
+        this.time.addEvent({
+            delay: 1200,
+            callback: () => {
+                if (this.hasEnded) return;
+                const attack = this.add.circle(this.bossX - 60, this.bossY, 12, 0x222222);
+                attack.vx = -8;
+                this.attacks.push(attack);
+            },
+            loop: true
+        });
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (this.hasEnded || this.playerApples <= 0) return;
+            this.playerApples--;
+            this.appleText.setText('Äpfel: ' + this.playerApples);
+            const bullet = this.add.circle(this.playerX + 30, this.playerY, 8, 0xff0000);
+            bullet.vx = 10;
+            bullet.isPlayerBullet = true;
+            this.attacks.push(bullet);
+        });
+
+        this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
+    }
+
+    updateHealthBar() {
+        this.healthBar.clear();
+        this.healthBar.fillStyle(0x333333);
+        this.healthBar.fillRect(550, 70, 200, 20);
+        this.healthBar.fillStyle(0xff0000);
+        this.healthBar.fillRect(550, 70, 200 * (this.bossHealth / this.bossMaxHealth), 20);
+    }
+
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        const speed = 5;
+        if (this.cursors.left.isDown) {
+            this.playerX -= speed;
+            if (this.player.play) this.player.play('kaeppchen_left', true);
+        } else if (this.cursors.right.isDown) {
+            this.playerX += speed;
+            if (this.player.play) this.player.play('kaeppchen_right', true);
+        } else if (this.cursors.up.isDown) {
+            this.playerY -= speed;
+            if (this.player.play) this.player.play('kaeppchen_up', true);
+        } else if (this.cursors.down.isDown) {
+            this.playerY += speed;
+            if (this.player.play) this.player.play('kaeppchen_down', true);
+        }
+
+        this.playerX = Phaser.Math.Clamp(this.playerX, 30, 400);
+        this.playerY = Phaser.Math.Clamp(this.playerY, 80, 530);
+        this.player.x = this.playerX;
+        this.player.y = this.playerY;
+
+        // Wolf bewegt sich
+        this.bossY += this.bossVY;
+        if (this.bossY < 100 || this.bossY > 500) this.bossVY *= -1;
+        this.boss.y = this.bossY;
+
+        // Äpfel aufsammeln
+        this.apples.forEach((apple, idx) => {
+            if (Phaser.Math.Distance.Between(this.playerX, this.playerY, apple.x, apple.y) < 25) {
+                apple.destroy();
+                this.apples.splice(idx, 1);
+                this.playerApples++;
+                this.appleText.setText('Äpfel: ' + this.playerApples);
+                musicEngine.playSFX('click');
+            }
+        });
+
+        // Angriffe bewegen
+        for (let i = this.attacks.length - 1; i >= 0; i--) {
+            const atk = this.attacks[i];
+            atk.x += atk.vx || -8;
+
+            if (atk.x < -20 || atk.x > 820) {
+                atk.destroy();
+                this.attacks.splice(i, 1);
+                continue;
+            }
+
+            // Spieler getroffen
+            if (!atk.isPlayerBullet && Phaser.Math.Distance.Between(this.playerX, this.playerY, atk.x, atk.y) < 25) {
+                this.lose();
+            }
+
+            // Boss getroffen
+            if (atk.isPlayerBullet && Phaser.Math.Distance.Between(this.bossX, this.bossY, atk.x, atk.y) < 60) {
+                atk.destroy();
+                this.attacks.splice(i, 1);
+                this.bossHealth--;
+                this.updateHealthBar();
+                this.cameras.main.shake(100, 0.01);
+                if (this.bossHealth <= 0) this.win();
+            }
+        }
+    }
+
+    exitToMenu() {
+        this.hasEnded = true;
+        musicEngine.stopMusic();
+        this.scene.stop();
+        if (this.parentScene) this.parentScene.scene.stop();
+        this.scene.start('StartScreen');
+    }
+}
+
+// Edgar Boss - Flipper/Pinball Boss
+class EdgarBoss extends BaseMicrogame {
+    constructor() { super({ key: 'EdgarBoss' }); }
+    create() {
+        super.create();
+        this.cameras.main.setBackgroundColor('#1a1a2e');
+
+        this.add.text(400, 30, 'EDGAR BOSS!', { font: 'bold 34px Orbitron', fill: '#9B59B6' }).setOrigin(0.5);
+        this.add.text(400, 560, '← → Paddle bewegen | Triff den Boss!', { font: '14px Orbitron', fill: '#888' }).setOrigin(0.5);
+
+        // Boss oben
+        this.bossX = 400;
+        this.bossY = 100;
+        this.boss = this.add.rectangle(this.bossX, this.bossY, 120, 60, 0xe74c3c);
+        this.bossVX = 3;
+
+        this.bossMaxHealth = 5;
+        this.bossHealth = this.bossMaxHealth;
+
+        // Health Bar
+        this.healthBar = this.add.graphics();
+        this.updateHealthBar();
+
+        // Paddle unten
+        this.paddleX = 400;
+        this.paddle = this.add.rectangle(this.paddleX, 520, 100, 15, 0x3498db);
+
+        // Edgar (der Ball)
+        this.edgarX = 400;
+        this.edgarY = 450;
+        this.edgarVX = 4;
+        this.edgarVY = -5;
+
+        if (this.textures.exists('edgar')) {
+            this.edgar = this.add.image(this.edgarX, this.edgarY, 'edgar').setScale(2.0);
+        } else {
+            this.edgar = this.add.circle(this.edgarX, this.edgarY, 20, 0x9B59B6);
+        }
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
+    }
+
+    updateHealthBar() {
+        this.healthBar.clear();
+        this.healthBar.fillStyle(0x333333);
+        this.healthBar.fillRect(300, 70, 200, 20);
+        this.healthBar.fillStyle(0xe74c3c);
+        this.healthBar.fillRect(300, 70, 200 * (this.bossHealth / this.bossMaxHealth), 20);
+    }
+
+    update() {
+        super.update();
+        if (this.hasEnded) return;
+
+        // Paddle bewegen
+        if (this.cursors.left.isDown) {
+            this.paddleX -= 8;
+        } else if (this.cursors.right.isDown) {
+            this.paddleX += 8;
+        }
+        this.paddleX = Phaser.Math.Clamp(this.paddleX, 60, 740);
+        this.paddle.x = this.paddleX;
+
+        // Boss bewegen
+        this.bossX += this.bossVX;
+        if (this.bossX < 80 || this.bossX > 720) this.bossVX *= -1;
+        this.boss.x = this.bossX;
+
+        // Edgar (Ball) bewegen
+        this.edgarX += this.edgarVX;
+        this.edgarY += this.edgarVY;
+        this.edgar.x = this.edgarX;
+        this.edgar.y = this.edgarY;
+        this.edgar.angle += this.edgarVX * 2;
+
+        // Wand-Kollision
+        if (this.edgarX < 30 || this.edgarX > 770) {
+            this.edgarVX *= -1;
+        }
+        if (this.edgarY < 50) {
+            this.edgarVY *= -1;
+        }
+
+        // Paddle-Kollision
+        if (this.edgarY > 500 && this.edgarY < 530 &&
+            this.edgarX > this.paddleX - 60 && this.edgarX < this.paddleX + 60) {
+            this.edgarVY = -Math.abs(this.edgarVY);
+            // Winkel basierend auf Aufprallpunkt
+            const diff = (this.edgarX - this.paddleX) / 50;
+            this.edgarVX = diff * 6;
+            musicEngine.playSFX('click');
+        }
+
+        // Ball verloren
+        if (this.edgarY > 580) {
+            this.lose();
+        }
+
+        // Boss-Kollision
+        if (this.edgarY < 140 && this.edgarY > 60 &&
+            this.edgarX > this.bossX - 70 && this.edgarX < this.bossX + 70) {
+            this.edgarVY = Math.abs(this.edgarVY);
+            this.bossHealth--;
+            this.updateHealthBar();
+            this.cameras.main.shake(100, 0.01);
+            if (this.bossHealth <= 0) this.win();
+        }
+    }
+
+    exitToMenu() {
+        this.hasEnded = true;
+        musicEngine.stopMusic();
+        this.scene.stop();
+        if (this.parentScene) this.parentScene.scene.stop();
+        this.scene.start('StartScreen');
+    }
+}
+
 // SCENES
 
 // Boot Scene - lädt alle Bilder
@@ -2278,16 +3163,24 @@ class BootScene extends Phaser.Scene {
         // Charakter-Bilder laden
         this.load.image('zobel', 'Zobel.png');
         this.load.image('swaggy', 'swaggy.png');
-        // Dude ist ein Spritesheet: 9 Frames (288x48 = 32x48 pro Frame)
+        // Trashi ist ein Spritesheet: 9 Frames (288x48 = 32x48 pro Frame)
         this.load.spritesheet('dude', 'dude.png', { frameWidth: 32, frameHeight: 48 });
+        // Käppchen ist ein Spritesheet: 36 Frames (1332x64 = 37x64 pro Frame)
+        this.load.spritesheet('kaeppchen', 'kaeppchen.png', { frameWidth: 37, frameHeight: 64 });
+        // Edgar ist ein einfacher Ball
+        this.load.image('edgar', 'edgar.png');
     }
     create() {
         // Debug: Zeige geladene Texturen
-        console.log('Zobel geladen:', this.textures.exists('zobel'));
-        console.log('Swaggy geladen:', this.textures.exists('swaggy'));
-        console.log('Dude geladen:', this.textures.exists('dude'));
+        console.log('Alle Charaktere geladen:', {
+            zobel: this.textures.exists('zobel'),
+            swaggy: this.textures.exists('swaggy'),
+            dude: this.textures.exists('dude'),
+            kaeppchen: this.textures.exists('kaeppchen'),
+            edgar: this.textures.exists('edgar')
+        });
 
-        // Dude-Animationen erstellen (nur wenn geladen)
+        // Trashi-Animationen erstellen
         if (this.textures.exists('dude')) {
             if (!this.anims.exists('dude_left')) {
                 this.anims.create({
@@ -2310,6 +3203,49 @@ class BootScene extends Phaser.Scene {
                     frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
                     frameRate: 10,
                     repeat: -1
+                });
+            }
+        }
+
+        // Käppchen-Animationen erstellen (Top-Down: 9 frames pro Richtung)
+        if (this.textures.exists('kaeppchen')) {
+            if (!this.anims.exists('kaeppchen_down')) {
+                this.anims.create({
+                    key: 'kaeppchen_down',
+                    frames: this.anims.generateFrameNumbers('kaeppchen', { start: 0, end: 8 }),
+                    frameRate: 12,
+                    repeat: -1
+                });
+            }
+            if (!this.anims.exists('kaeppchen_up')) {
+                this.anims.create({
+                    key: 'kaeppchen_up',
+                    frames: this.anims.generateFrameNumbers('kaeppchen', { start: 9, end: 17 }),
+                    frameRate: 12,
+                    repeat: -1
+                });
+            }
+            if (!this.anims.exists('kaeppchen_left')) {
+                this.anims.create({
+                    key: 'kaeppchen_left',
+                    frames: this.anims.generateFrameNumbers('kaeppchen', { start: 18, end: 26 }),
+                    frameRate: 12,
+                    repeat: -1
+                });
+            }
+            if (!this.anims.exists('kaeppchen_right')) {
+                this.anims.create({
+                    key: 'kaeppchen_right',
+                    frames: this.anims.generateFrameNumbers('kaeppchen', { start: 27, end: 35 }),
+                    frameRate: 12,
+                    repeat: -1
+                });
+            }
+            if (!this.anims.exists('kaeppchen_idle')) {
+                this.anims.create({
+                    key: 'kaeppchen_idle',
+                    frames: [{ key: 'kaeppchen', frame: 0 }],
+                    frameRate: 1
                 });
             }
         }
@@ -2354,11 +3290,13 @@ class StartScreen extends Phaser.Scene {
         this.tweens.add({ targets: title, scaleX: 1.02, scaleY: 1.02, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         this.add.text(400, 160, 'v2.0 - WarioWare Style!', { font: '16px Orbitron', fill: '#888' }).setOrigin(0.5);
 
-        // Alle 3 Charaktere anzeigen
+        // Alle 5 Charaktere anzeigen
         const characters = [
-            { key: 'zobel', x: 200, scale: 0.2, name: 'Zobel', y: 260 },
-            { key: 'swaggy', x: 400, scale: 0.1, name: 'Swaggy', y: 260 },
-            { key: 'dude', x: 600, scale: 3.0, name: 'Trashi', y: 220 }
+            { key: 'zobel', x: 80, scale: 0.15, name: 'Zobel', y: 260 },
+            { key: 'swaggy', x: 240, scale: 0.08, name: 'Swaggy', y: 260 },
+            { key: 'dude', x: 400, scale: 2.5, name: 'Trashi', y: 220 },
+            { key: 'kaeppchen', x: 560, scale: 1.2, name: 'Käppchen', y: 240 },
+            { key: 'edgar', x: 720, scale: 2.0, name: 'Edgar', y: 260 }
         ];
 
         characters.forEach((char, idx) => {
@@ -2384,11 +3322,40 @@ class StartScreen extends Phaser.Scene {
                     },
                     loop: false
                 });
+            } else if (char.key === 'kaeppchen' && this.textures.exists('kaeppchen')) {
+                sprite = this.add.sprite(char.x, char.y, 'kaeppchen', 0).setScale(char.scale);
+                // Käppchen walk animation
+                this.time.addEvent({
+                    delay: 500 + idx * 200,
+                    callback: () => {
+                        const anims = ['kaeppchen_down', 'kaeppchen_left', 'kaeppchen_up', 'kaeppchen_right'];
+                        let animIdx = 0;
+                        this.time.addEvent({
+                            delay: 1000,
+                            callback: () => {
+                                sprite.play(anims[animIdx % anims.length]);
+                                animIdx++;
+                            },
+                            loop: true
+                        });
+                    },
+                    loop: false
+                });
+            } else if (char.key === 'edgar' && this.textures.exists('edgar')) {
+                sprite = this.add.image(char.x, char.y, 'edgar').setScale(char.scale);
+                // Edgar rotiert
+                this.tweens.add({
+                    targets: sprite,
+                    angle: 360,
+                    duration: 2000,
+                    repeat: -1,
+                    ease: 'Linear'
+                });
             } else if (this.textures.exists(char.key)) {
                 sprite = this.add.image(char.x, char.y, char.key).setScale(char.scale);
             } else {
-                // Fallback auf gezeichnetes Zobel
-                sprite = Zobel.draw(this, char.x, char.y, 0.7);
+                // Fallback
+                sprite = this.add.circle(char.x, char.y, 30, 0x888888);
             }
 
             // Schwebeeffekt
@@ -2403,7 +3370,7 @@ class StartScreen extends Phaser.Scene {
 
             // Charakter-Name
             this.add.text(char.x, 310, char.name, {
-                font: 'bold 14px Orbitron', fill: '#ffffff'
+                font: 'bold 11px Orbitron', fill: '#ffffff'
             }).setOrigin(0.5);
         });
 
@@ -2467,7 +3434,13 @@ class AlbumScene extends Phaser.Scene {
             { key: 'SwaggyDance', name: 'Swaggy Dance', color: 0xFFA500 }, { key: 'SwaggyFish', name: 'Swaggy Fish', color: 0xFFA500 },
             // Trashi Spiele
             { key: 'DudeRun', name: 'Trashi Run', color: 0x4169E1 }, { key: 'DudeDodge', name: 'Trashi Dodge', color: 0x4169E1 },
-            { key: 'DudeJump', name: 'Trashi Jump', color: 0x4169E1 }
+            { key: 'DudeJump', name: 'Trashi Jump', color: 0x4169E1 },
+            // Käppchen Spiele
+            { key: 'KaeppchenCollect', name: 'Sammeln', color: 0xE63946 }, { key: 'KaeppchenMaze', name: 'Labyrinth', color: 0xE63946 },
+            { key: 'KaeppchenDodge', name: 'Wölfe', color: 0xE63946 }, { key: 'KaeppchenDeliver', name: 'Liefern', color: 0xE63946 },
+            // Edgar Spiele
+            { key: 'EdgarRoll', name: 'Rollen', color: 0x9B59B6 }, { key: 'EdgarBounce', name: 'Hüpfen', color: 0x9B59B6 },
+            { key: 'EdgarGoal', name: 'Tor', color: 0x9B59B6 }, { key: 'EdgarDodge', name: 'Ausweichen', color: 0x9B59B6 }
         ];
         this.allGames = games; this.currentPage = 0; this.itemsPerPage = 12; this.totalPages = Math.ceil(games.length / this.itemsPerPage);
         this.cardsContainer = this.add.container(0, 0);
@@ -3110,7 +4083,7 @@ class GameOverScene extends Phaser.Scene {
 const config = {
     type: Phaser.AUTO, width: 800, height: 600,
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
-    scene: [BootScene, StartScreen, GameScene, GameOverScene, AlbumScene, ShopScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, DudeRun, DudeDodge, DudeJump, BossGame, BoxingBoss, SwaggyBoss]
+    scene: [BootScene, StartScreen, GameScene, GameOverScene, AlbumScene, ShopScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, DudeRun, DudeDodge, DudeJump, KaeppchenCollect, KaeppchenMaze, KaeppchenDodge, KaeppchenDeliver, EdgarRoll, EdgarBounce, EdgarGoal, EdgarDodge, BossGame, BoxingBoss, SwaggyBoss, KaeppchenBoss, EdgarBoss]
 };
 const game = new Phaser.Game(config);
 </script>
