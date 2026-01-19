@@ -97,6 +97,33 @@ class MusicEngine {
             g.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
             osc.connect(g); g.connect(sfxGain);
             osc.start(time); osc.stop(time + 0.05);
+        } else if (type === 'explosion') {
+            // Explosionsgeräusch: Rauschen + tiefer Knall
+            const bufferSize = ctx.sampleRate * 0.4;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+            }
+            const noise = ctx.createBufferSource();
+            noise.buffer = buffer;
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(0.6, time);
+            noiseGain.gain.exponentialRampToValueAtTime(0.01, time + 0.4);
+            noise.connect(noiseGain);
+            noiseGain.connect(sfxGain);
+            noise.start(time);
+            // Tiefer Knall
+            const boom = ctx.createOscillator(), boomGain = ctx.createGain();
+            boom.type = 'sine';
+            boom.frequency.setValueAtTime(150, time);
+            boom.frequency.exponentialRampToValueAtTime(30, time + 0.3);
+            boomGain.gain.setValueAtTime(0.7, time);
+            boomGain.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
+            boom.connect(boomGain);
+            boomGain.connect(sfxGain);
+            boom.start(time);
+            boom.stop(time + 0.3);
         }
     }
     // Transition Jingle - wird schneller mit gameSpeed
@@ -310,6 +337,7 @@ const CharacterManager = {
     currentCharacter: 'zobel',
     characterIndex: 0,
     characters: ['zobel', 'swaggy', 'dude', 'kaeppchen', 'edgar'],
+    playedThisRound: [],  // Welche Charaktere wurden in dieser Runde gespielt
 
     // Charakter-Definitionen
     data: {
@@ -427,8 +455,33 @@ const CharacterManager = {
     },
 
     nextCharacter() {
-        this.characterIndex = (this.characterIndex + 1) % this.characters.length;
-        this.currentCharacter = this.characters[this.characterIndex];
+        // Aktuellen Charakter als gespielt markieren
+        if (!this.playedThisRound.includes(this.currentCharacter)) {
+            this.playedThisRound.push(this.currentCharacter);
+        }
+
+        // Alle anderen Charaktere (nicht Zobel)
+        const otherChars = this.characters.filter(c => c !== 'zobel');
+
+        // Welche anderen Charaktere wurden noch nicht gespielt?
+        const remainingOthers = otherChars.filter(c => !this.playedThisRound.includes(c));
+
+        if (remainingOthers.length === 0) {
+            // Alle haben gespielt, neue Runde mit Zobel starten
+            this.playedThisRound = [];
+            this.currentCharacter = 'zobel';
+        } else {
+            // Zufällig einen der verbleibenden wählen (nicht den aktuellen)
+            const available = remainingOthers.filter(c => c !== this.currentCharacter);
+            if (available.length > 0) {
+                this.currentCharacter = Phaser.Utils.Array.GetRandom(available);
+            } else {
+                // Nur noch einer übrig, den nehmen
+                this.currentCharacter = remainingOthers[0];
+            }
+        }
+
+        this.characterIndex = this.characters.indexOf(this.currentCharacter);
         return this.getCurrentCharacter();
     },
 
@@ -437,6 +490,12 @@ const CharacterManager = {
             this.currentCharacter = name;
             this.characterIndex = this.characters.indexOf(name);
         }
+    },
+
+    resetRound() {
+        this.playedThisRound = [];
+        this.currentCharacter = 'zobel';
+        this.characterIndex = 0;
     },
 
     getRandomGame() {
@@ -496,6 +555,7 @@ class BaseMicrogame extends Phaser.Scene {
         this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
     }
     startTimer() { this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.lose(); }); }
+    startSurvivalTimer() { this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.win(); }); }
     update() {
         if (this.hasEnded || !this.gameTimer) return;
         const p = this.gameTimer.getProgress();
@@ -583,7 +643,7 @@ class MashTheKey extends BaseMicrogame {
 
 class StopTheBar extends BaseMicrogame {
     constructor() { super({ key: 'StopTheBar' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'STOPP!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.rectangle(400, 300, 80, 150, 0x00ff88, 0.3); this.add.rectangle(400, 300, 80, 150).setStrokeStyle(4, 0x00ff88); this.movingBar = this.add.rectangle(100, 300, 25, 150, 0xff6b6b); this.tweens.add({ targets: this.movingBar, x: 700, duration: 800 / this.gameSpeed, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.input.keyboard.on('keydown-SPACE', () => { if (this.hasEnded || this.inputBufferActive) return; if (this.movingBar.x >= 360 && this.movingBar.x <= 440) this.win(); else this.lose(); }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'STOPP!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.rectangle(400, 300, 80, 150, 0x00ff88, 0.3); this.add.rectangle(400, 300, 80, 150).setStrokeStyle(4, 0x00ff88); this.movingBar = this.add.rectangle(100, 300, 25, 150, 0xff6b6b); this.tweens.add({ targets: this.movingBar, x: 700, duration: Math.max(400, 800 / this.gameSpeed), ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.input.keyboard.on('keydown-SPACE', () => { if (this.hasEnded || this.inputBufferActive) return; if (this.movingBar.x >= 360 && this.movingBar.x <= 440) this.win(); else this.lose(); }); this.startTimer(); }
 }
 
 class CatchTheGem extends BaseMicrogame {
@@ -624,13 +684,13 @@ class MatchTheShape extends BaseMicrogame {
 
 class HitTheTarget extends BaseMicrogame {
     constructor() { super({ key: 'HitTheTarget' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'TRIFF!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.target = this.add.circle(400, 300, 60, 0xff6b6b); this.target.setStrokeStyle(6, 0x00ff88); this.tweens.add({ targets: this.target, x: { from: 150, to: 650 }, duration: 2500 / this.gameSpeed, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.crosshair = this.add.graphics({ lineStyle: { width: 4, color: 0x00ff88 } }); this.crosshair.lineBetween(-30, 0, 30, 0); this.crosshair.lineBetween(0, -30, 0, 30); this.input.on('pointerdown', (p) => { if (this.hasEnded || this.inputBufferActive) return; if (Phaser.Math.Distance.Between(p.x, p.y, this.target.x, this.target.y) <= 80) this.win(); else this.lose(); }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'TRIFF!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.target = this.add.circle(400, 300, 60, 0xff6b6b); this.target.setStrokeStyle(6, 0x00ff88); this.tweens.add({ targets: this.target, x: { from: 150, to: 650 }, duration: Math.max(800, 2500 / this.gameSpeed), ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.crosshair = this.add.graphics({ lineStyle: { width: 4, color: 0x00ff88 } }); this.crosshair.lineBetween(-30, 0, 30, 0); this.crosshair.lineBetween(0, -30, 0, 30); this.input.on('pointerdown', (p) => { if (this.hasEnded || this.inputBufferActive) return; if (Phaser.Math.Distance.Between(p.x, p.y, this.target.x, this.target.y) <= 80) this.win(); else this.lose(); }); this.startTimer(); }
     update() { super.update(); this.crosshair.x = this.input.x; this.crosshair.y = this.input.y; }
 }
 
 class TargetClick extends BaseMicrogame {
     constructor() { super({ key: 'TargetClick' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#8e44ad'); this.add.text(400, 60, 'KLICK DEN KREIS!', { font: 'bold 34px Orbitron', fill: '#fff' }).setOrigin(0.5); const pos = this.spawnAwayFromCursor(180); this.target = this.add.circle(pos.x, pos.y, 35, 0xff0000).setInteractive({ useHandCursor: true }); this.tweens.add({ targets: this.target, x: Phaser.Math.Between(100, 700), y: Phaser.Math.Between(150, 450), duration: 1200 / this.gameSpeed, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.target.on('pointerdown', () => { if (!this.inputBufferActive) this.win(); }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#8e44ad'); this.add.text(400, 60, 'KLICK DEN KREIS!', { font: 'bold 34px Orbitron', fill: '#fff' }).setOrigin(0.5); const pos = this.spawnAwayFromCursor(180); this.target = this.add.circle(pos.x, pos.y, 35, 0xff0000).setInteractive({ useHandCursor: true }); this.tweens.add({ targets: this.target, x: Phaser.Math.Between(100, 700), y: Phaser.Math.Between(150, 450), duration: Math.max(500, 1200 / this.gameSpeed), ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.target.on('pointerdown', () => { if (!this.inputBufferActive) this.win(); }); this.startTimer(); }
 }
 
 class MathQuiz extends BaseMicrogame {
@@ -1712,7 +1772,7 @@ class DudeDodge extends BaseMicrogame {
         });
 
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.startTimer();
+        this.startSurvivalTimer();  // Überleben = Gewinnen!
     }
 
     update() {
@@ -2012,7 +2072,7 @@ class KaeppchenDodge extends BaseMicrogame {
         super.create();
         this.cameras.main.setBackgroundColor('#1a3d1a');
 
-        this.add.text(400, 30, 'Weiche den Wölfen aus!', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(400, 30, 'Überlebe die Wölfe!', { font: '16px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
         // Käppchen
         this.playerX = 400;
@@ -2023,18 +2083,18 @@ class KaeppchenDodge extends BaseMicrogame {
             this.player = this.add.circle(this.playerX, this.playerY, 20, 0xE63946);
         }
 
-        // Wölfe spawnen
+        // Wölfe spawnen - langsamer für bessere Spielbarkeit
         this.wolves = [];
         this.spawnTimer = this.time.addEvent({
-            delay: 600,
+            delay: 800,
             callback: () => {
                 if (this.hasEnded) return;
                 const side = Phaser.Math.Between(0, 3);
                 let x, y, vx = 0, vy = 0;
-                if (side === 0) { x = -20; y = Phaser.Math.Between(100, 500); vx = 4; }
-                else if (side === 1) { x = 820; y = Phaser.Math.Between(100, 500); vx = -4; }
-                else if (side === 2) { x = Phaser.Math.Between(100, 700); y = -20; vy = 4; }
-                else { x = Phaser.Math.Between(100, 700); y = 620; vy = -4; }
+                if (side === 0) { x = -20; y = Phaser.Math.Between(100, 500); vx = 3; }
+                else if (side === 1) { x = 820; y = Phaser.Math.Between(100, 500); vx = -3; }
+                else if (side === 2) { x = Phaser.Math.Between(100, 700); y = -20; vy = 3; }
+                else { x = Phaser.Math.Between(100, 700); y = 620; vy = -3; }
                 const wolf = this.add.circle(x, y, 15, 0x444444);
                 wolf.vx = vx; wolf.vy = vy;
                 this.wolves.push(wolf);
@@ -2043,7 +2103,7 @@ class KaeppchenDodge extends BaseMicrogame {
         });
 
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.startTimer();
+        this.startSurvivalTimer();  // Überleben = Gewinnen!
     }
     update() {
         super.update();
@@ -2192,11 +2252,11 @@ class EdgarBounce extends BaseMicrogame {
         this.add.text(400, 30, 'Hüpfe 3x! SPACE', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
         this.bounceText = this.add.text(400, 60, '0 / 3', { font: 'bold 24px Orbitron', fill: '#9B59B6' }).setOrigin(0.5);
 
-        // Plattformen
+        // Plattformen - größer für bessere Spielbarkeit
         this.platforms = [
-            this.add.rectangle(150, 450, 100, 20, 0x7f8c8d),
-            this.add.rectangle(400, 350, 100, 20, 0x7f8c8d),
-            this.add.rectangle(650, 250, 100, 20, 0x7f8c8d)
+            this.add.rectangle(150, 450, 180, 25, 0x7f8c8d),
+            this.add.rectangle(400, 350, 180, 25, 0x7f8c8d),
+            this.add.rectangle(650, 250, 180, 25, 0x7f8c8d)
         ];
 
         // Boden
@@ -2249,11 +2309,11 @@ class EdgarBounce extends BaseMicrogame {
             this.onGround = true;
         }
 
-        // Plattform-Check
+        // Plattform-Check - größerer Bereich für größere Plattformen
         this.platforms.forEach((plat, idx) => {
             if (this.velocityY > 0 &&
-                this.edgarX > plat.x - 60 && this.edgarX < plat.x + 60 &&
-                this.edgarY > plat.y - 30 && this.edgarY < plat.y + 10) {
+                this.edgarX > plat.x - 100 && this.edgarX < plat.x + 100 &&
+                this.edgarY > plat.y - 30 && this.edgarY < plat.y + 15) {
                 this.edgarY = plat.y - 20;
                 this.velocityY = 0;
                 this.onGround = true;
@@ -2281,11 +2341,13 @@ class EdgarGoal extends BaseMicrogame {
 
         this.add.text(400, 30, 'Schieß ins Tor!', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
-        // Tor oben
-        this.add.rectangle(400, 80, 150, 60, 0xffffff, 0.3);
-        this.add.rectangle(400, 80, 150, 60).setStrokeStyle(4, 0xffffff);
+        // Tor an zufälliger Position (links, mitte, rechts)
+        const goalPositions = [200, 400, 600];
+        this.goalX = Phaser.Utils.Array.GetRandom(goalPositions);
+        this.add.rectangle(this.goalX, 80, 150, 60, 0xffffff, 0.3);
+        this.add.rectangle(this.goalX, 80, 150, 60).setStrokeStyle(4, 0xffffff);
 
-        // Edgar
+        // Edgar startet mittig
         this.edgarX = 400;
         this.edgarY = 450;
         this.velocityX = 0;
@@ -2339,7 +2401,7 @@ class EdgarGoal extends BaseMicrogame {
             this.edgar.angle += this.velocityX * 2;
 
             // Tor getroffen?
-            if (this.edgarY < 110 && this.edgarX > 325 && this.edgarX < 475) {
+            if (this.edgarY < 110 && this.edgarX > this.goalX - 75 && this.edgarX < this.goalX + 75) {
                 this.win();
             }
 
@@ -2358,7 +2420,7 @@ class EdgarDodge extends BaseMicrogame {
         this.cameras.main.setBackgroundColor('#2c3e50');
 
         this.add.rectangle(400, 550, 800, 60, 0x34495e);
-        this.add.text(400, 30, 'Weiche aus! ← →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(400, 30, 'Überlebe! ← →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
         // Edgar
         this.edgarX = 400;
@@ -2368,24 +2430,24 @@ class EdgarDodge extends BaseMicrogame {
             this.edgar = this.add.circle(this.edgarX, 490, 25, 0x9B59B6);
         }
 
-        // Fallende Objekte
+        // Fallende Objekte - langsamer spawnen
         this.obstacles = [];
         this.spawnTimer = this.time.addEvent({
-            delay: 400,
+            delay: 500,
             callback: () => {
                 if (this.hasEnded) return;
                 const obs = this.add.rectangle(
                     Phaser.Math.Between(50, 750), -20,
                     30, 30, 0xe74c3c
                 );
-                obs.vy = Phaser.Math.Between(5, 9);
+                obs.vy = Phaser.Math.Between(4, 7);
                 this.obstacles.push(obs);
             },
             loop: true
         });
 
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.startTimer();
+        this.startSurvivalTimer();  // Überleben = Gewinnen!
     }
     update() {
         super.update();
@@ -3169,6 +3231,9 @@ class BootScene extends Phaser.Scene {
         this.load.spritesheet('kaeppchen', 'kaeppchen.png', { frameWidth: 37, frameHeight: 64 });
         // Edgar ist ein einfacher Ball
         this.load.image('edgar', 'edgar.png');
+        // StartScreen Animation Bilder
+        this.load.image('explosion', 'explosion.png');
+        this.load.image('characters', 'characters.png');
     }
     create() {
         // Debug: Zeige geladene Texturen
@@ -3290,6 +3355,41 @@ class StartScreen extends Phaser.Scene {
         this.tweens.add({ targets: title, scaleX: 1.02, scaleY: 1.02, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         this.add.text(400, 160, 'v2.0 - WarioWare Style!', { font: '16px Orbitron', fill: '#888' }).setOrigin(0.5);
 
+        // EXPLOSION ANIMATION
+        const explosionCenterX = 400;
+        const explosionCenterY = 260;
+
+        // Explosion Bild hinzufügen (startet klein)
+        let explosion = null;
+        if (this.textures.exists('explosion')) {
+            explosion = this.add.image(explosionCenterX, explosionCenterY, 'explosion').setScale(0).setAlpha(0);
+            // Explosion wächst
+            this.tweens.add({
+                targets: explosion,
+                scale: 0.4,
+                alpha: 1,
+                duration: 500,
+                ease: 'Back.easeOut',
+                onComplete: () => {
+                    // Nach Explosion: sanftes Wackeln
+                    this.tweens.add({
+                        targets: explosion,
+                        scale: 0.42,
+                        angle: { from: -2, to: 2 },
+                        duration: 300,
+                        yoyo: true,
+                        repeat: -1,
+                        ease: 'Sine.easeInOut'
+                    });
+                }
+            });
+            // Explosions-Sound abspielen
+            this.time.delayedCall(100, () => {
+                musicEngine.initialize();
+                musicEngine.playSFX('explosion');
+            });
+        }
+
         // Alle 5 Charaktere anzeigen
         const characters = [
             { key: 'zobel', x: 80, scale: 0.15, name: 'Zobel', y: 260 },
@@ -3299,15 +3399,51 @@ class StartScreen extends Phaser.Scene {
             { key: 'edgar', x: 720, scale: 2.0, name: 'Edgar', y: 260 }
         ];
 
+        const characterSprites = [];
+
         characters.forEach((char, idx) => {
             let sprite;
+            // Alle Charaktere starten von der Explosion-Mitte
+            const startX = explosionCenterX;
+            const startY = explosionCenterY;
+
             if (char.key === 'dude' && this.textures.exists('dude')) {
-                sprite = this.add.sprite(char.x, char.y, 'dude', 4).setScale(char.scale);
-                // Trashi idle animation
-                this.time.addEvent({
-                    delay: 500 + idx * 200,
-                    callback: () => {
-                        if (sprite.anims) {
+                sprite = this.add.sprite(startX, startY, 'dude', 4).setScale(0);
+            } else if (char.key === 'kaeppchen' && this.textures.exists('kaeppchen')) {
+                sprite = this.add.sprite(startX, startY, 'kaeppchen', 0).setScale(0);
+            } else if (char.key === 'edgar' && this.textures.exists('edgar')) {
+                sprite = this.add.image(startX, startY, 'edgar').setScale(0);
+            } else if (this.textures.exists(char.key)) {
+                sprite = this.add.image(startX, startY, char.key).setScale(0);
+            } else {
+                sprite = this.add.circle(startX, startY, 30, 0x888888).setScale(0);
+            }
+
+            characterSprites.push({ sprite, char, idx });
+
+            // Charakter fliegt aus Explosion heraus (verzögert)
+            this.time.delayedCall(300 + idx * 100, () => {
+                this.tweens.add({
+                    targets: sprite,
+                    x: char.x,
+                    y: char.y,
+                    scale: char.scale,
+                    duration: 600,
+                    ease: 'Back.easeOut',
+                    onComplete: () => {
+                        // Nach Landung: Wackel-Effekt + Schweben
+                        this.tweens.add({
+                            targets: sprite,
+                            y: char.y - 10,
+                            angle: { from: -3, to: 3 },
+                            duration: 1200 + idx * 200,
+                            yoyo: true,
+                            repeat: -1,
+                            ease: 'Sine.easeInOut'
+                        });
+
+                        // Spezielle Animationen für animierte Charaktere
+                        if (char.key === 'dude' && sprite.anims) {
                             const anims = ['dude_left', 'dude_idle', 'dude_right', 'dude_idle'];
                             let animIdx = 0;
                             this.time.addEvent({
@@ -3318,60 +3454,43 @@ class StartScreen extends Phaser.Scene {
                                 },
                                 loop: true
                             });
+                        } else if (char.key === 'kaeppchen' && sprite.anims) {
+                            const anims = ['kaeppchen_down', 'kaeppchen_left', 'kaeppchen_up', 'kaeppchen_right'];
+                            let animIdx = 0;
+                            this.time.addEvent({
+                                delay: 1000,
+                                callback: () => {
+                                    sprite.play(anims[animIdx % anims.length]);
+                                    animIdx++;
+                                },
+                                loop: true
+                            });
+                        } else if (char.key === 'edgar') {
+                            // Edgar rotiert weiter
+                            this.tweens.add({
+                                targets: sprite,
+                                angle: '+=360',
+                                duration: 2000,
+                                repeat: -1,
+                                ease: 'Linear'
+                            });
                         }
-                    },
-                    loop: false
+                    }
                 });
-            } else if (char.key === 'kaeppchen' && this.textures.exists('kaeppchen')) {
-                sprite = this.add.sprite(char.x, char.y, 'kaeppchen', 0).setScale(char.scale);
-                // Käppchen walk animation
-                this.time.addEvent({
-                    delay: 500 + idx * 200,
-                    callback: () => {
-                        const anims = ['kaeppchen_down', 'kaeppchen_left', 'kaeppchen_up', 'kaeppchen_right'];
-                        let animIdx = 0;
-                        this.time.addEvent({
-                            delay: 1000,
-                            callback: () => {
-                                sprite.play(anims[animIdx % anims.length]);
-                                animIdx++;
-                            },
-                            loop: true
-                        });
-                    },
-                    loop: false
-                });
-            } else if (char.key === 'edgar' && this.textures.exists('edgar')) {
-                sprite = this.add.image(char.x, char.y, 'edgar').setScale(char.scale);
-                // Edgar rotiert
-                this.tweens.add({
-                    targets: sprite,
-                    angle: 360,
-                    duration: 2000,
-                    repeat: -1,
-                    ease: 'Linear'
-                });
-            } else if (this.textures.exists(char.key)) {
-                sprite = this.add.image(char.x, char.y, char.key).setScale(char.scale);
-            } else {
-                // Fallback
-                sprite = this.add.circle(char.x, char.y, 30, 0x888888);
-            }
-
-            // Schwebeeffekt
-            this.tweens.add({
-                targets: sprite,
-                y: char.y - 10,
-                duration: 1200 + idx * 200,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
             });
 
-            // Charakter-Name
-            this.add.text(char.x, 310, char.name, {
+            // Charakter-Name (erscheint nach Animation)
+            const nameText = this.add.text(char.x, 310, char.name, {
                 font: 'bold 11px Orbitron', fill: '#ffffff'
-            }).setOrigin(0.5);
+            }).setOrigin(0.5).setAlpha(0);
+
+            this.time.delayedCall(900 + idx * 100, () => {
+                this.tweens.add({
+                    targets: nameText,
+                    alpha: 1,
+                    duration: 300
+                });
+            });
         });
 
         // Highscore
@@ -3648,8 +3767,8 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#0a0a1a');
         this.score = 0; this.lives = 3; this.gameSpeed = 1.0; this.gamesPlayed = 0; this.winStreak = 0; this.lossStreak = 0;
 
-        // Charakter zurücksetzen auf ersten Charakter
-        CharacterManager.setCharacter('zobel');
+        // Charakter zurücksetzen auf Zobel und neue Runde starten
+        CharacterManager.resetRound();
 
         // UI Elemente
         this.scoreText = this.add.text(16, 16, 'Score: 0', { font: 'bold 28px Orbitron', fill: '#00ff88' });
