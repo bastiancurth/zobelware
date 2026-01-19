@@ -822,19 +822,19 @@ class ZobelFrogger extends BaseMicrogame {
             if (car.direction === -1 && car.x < -50) car.x = 850;
         });
 
-        // Zobel Bewegung (Schritt-basiert)
+        // Zobel Bewegung (Schritt-basiert) - Pfeiltasten + WASD
         if (this.canMove) {
-            if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+            if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.wasd.w)) {
                 this.zobel.y -= 100;
                 this.canMove = false;
                 this.time.delayedCall(150, () => this.canMove = true);
-            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down) && this.zobel.y < 480) {
+            } else if ((Phaser.Input.Keyboard.JustDown(this.cursors.down) || Phaser.Input.Keyboard.JustDown(this.wasd.s)) && this.zobel.y < 480) {
                 this.zobel.y += 100;
                 this.canMove = false;
                 this.time.delayedCall(150, () => this.canMove = true);
-            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.left) && this.zobel.x > 50) {
+            } else if ((Phaser.Input.Keyboard.JustDown(this.cursors.left) || Phaser.Input.Keyboard.JustDown(this.wasd.a)) && this.zobel.x > 50) {
                 this.zobel.x -= 80;
-            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.right) && this.zobel.x < 750) {
+            } else if ((Phaser.Input.Keyboard.JustDown(this.cursors.right) || Phaser.Input.Keyboard.JustDown(this.wasd.d)) && this.zobel.x < 750) {
                 this.zobel.x += 80;
             }
         }
@@ -2743,36 +2743,37 @@ class EdgarPinball extends BaseMicrogame {
     create() {
         super.create();
         this.cameras.main.setBackgroundColor('#1a0a2e');
-        this.add.text(400, 30, 'Triff alle Bumper! ← →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(400, 30, 'Triff einen Bumper! ← →', { font: '18px Orbitron', fill: '#fff' }).setOrigin(0.5);
 
         // Flipper
         this.flipperX = 400;
         this.flipper = this.add.rectangle(this.flipperX, 530, 120, 15, 0x9B59B6);
 
-        // Edgar als Ball
-        this.edgarX = 400; this.edgarY = 200;
-        this.velX = Phaser.Math.Between(-3, 3); this.velY = 3;
+        // Edgar als Ball - startet oben und fällt Richtung Paddle
+        this.edgarX = 400; this.edgarY = 120;
+        this.velX = 0; this.velY = 2;
         if (this.textures.exists('edgar')) {
             this.edgar = this.add.image(this.edgarX, this.edgarY, 'edgar').setScale(2);
         } else {
             this.edgar = this.add.circle(this.edgarX, this.edgarY, 20, 0x9B59B6);
         }
 
-        // Bumper - nur 3
+        // 3 Leben
+        this.lives = 3;
+        this.livesText = this.add.text(700, 30, '❤️'.repeat(this.lives), { font: '24px Arial' }).setOrigin(0.5);
+
+        // Bumper - 3 Stück, nur 1 treffen reicht
         this.bumpers = [];
-        this.bumperHit = 0;
-        this.target = 3;
-        const positions = [[200, 220], [400, 150], [600, 220]];
+        const positions = [[200, 280], [400, 200], [600, 280]];
         positions.forEach(p => {
-            const b = this.add.circle(p[0], p[1], 25, 0xFFD700);
+            const b = this.add.circle(p[0], p[1], 30, 0xFFD700);
             b.setStrokeStyle(3, 0xffffff);
             b.hit = false;
             this.bumpers.push(b);
         });
 
-        this.counterText = this.add.text(400, 70, '0/' + this.target, { font: 'bold 24px Orbitron', fill: '#FFD700' }).setOrigin(0.5);
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.startTimer();
+        this.startSurvivalTimer();
     }
     update() {
         super.update();
@@ -2787,7 +2788,7 @@ class EdgarPinball extends BaseMicrogame {
         // Edgar Ball Physik
         this.edgarX += this.velX;
         this.edgarY += this.velY;
-        this.velY += 0.15; // Gravity
+        this.velY += 0.12; // Gravity
 
         // Wand-Kollision
         if (this.edgarX < 30 || this.edgarX > 770) this.velX *= -1;
@@ -2795,25 +2796,36 @@ class EdgarPinball extends BaseMicrogame {
 
         // Flipper Kollision
         if (this.edgarY > 510 && this.edgarY < 540 && Math.abs(this.edgarX - this.flipperX) < 70) {
-            this.velY = -10;
+            this.velY = -9;
             this.velX = (this.edgarX - this.flipperX) / 10;
+            musicEngine.playSFX('click');
         }
 
-        // Bumper Kollision
+        // Bumper Kollision - 1 Treffer = Gewonnen!
         this.bumpers.forEach(b => {
-            if (!b.hit && Phaser.Math.Distance.Between(this.edgarX, this.edgarY, b.x, b.y) < 45) {
+            if (!b.hit && Phaser.Math.Distance.Between(this.edgarX, this.edgarY, b.x, b.y) < 50) {
                 b.hit = true;
                 b.setFillStyle(0x00ff88);
-                this.bumperHit++;
-                this.counterText.setText(this.bumperHit + '/' + this.target);
                 this.velY *= -1.2;
                 this.velX += Phaser.Math.Between(-2, 2);
-                if (this.bumperHit >= this.target) this.win();
+                this.win();
             }
         });
 
-        // Ball verloren
-        if (this.edgarY > 580) this.lose();
+        // Ball verloren - Leben abziehen
+        if (this.edgarY > 580) {
+            this.lives--;
+            this.livesText.setText('❤️'.repeat(this.lives));
+            if (this.lives <= 0) {
+                this.lose();
+            } else {
+                // Ball respawnen
+                this.edgarX = 400;
+                this.edgarY = 120;
+                this.velX = 0;
+                this.velY = 2;
+            }
+        }
 
         this.edgar.x = this.edgarX;
         this.edgar.y = this.edgarY;
@@ -3523,6 +3535,14 @@ class EdgarBoss extends BaseMicrogame {
             this.cameras.main.shake(100, 0.01);
             if (this.bossHealth <= 0) this.win();
         }
+    }
+
+    win() {
+        if (this.hasEnded) return;
+        this.hasEnded = true;
+        this.cameras.main.flash(200, 0, 255, 136);
+        musicEngine.playSFX('win');
+        if (this.parentScene) { this.parentScene.bossWon(); this.scene.stop(); }
     }
 
     exitToMenu() {
