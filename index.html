@@ -563,7 +563,14 @@ class BaseMicrogame extends Phaser.Scene {
         this.inputBufferActive = true;
         this.time.delayedCall(150, () => { this.inputBufferActive = false; });
         this.input.keyboard.on('keydown-ESC', () => this.exitToMenu());
+        // WASD Support für alle Spiele
+        this.wasd = this.input.keyboard.addKeys({ w: 'W', a: 'A', s: 'S', d: 'D' });
     }
+    // Helper für Pfeiltasten + WASD
+    isLeft() { return (this.cursors && this.isLeft()) || (this.wasd && this.wasd.a.isDown); }
+    isRight() { return (this.cursors && this.isRight()) || (this.wasd && this.wasd.d.isDown); }
+    isUp() { return (this.cursors && this.isUp()) || (this.wasd && this.wasd.w.isDown); }
+    isDown() { return (this.cursors && this.isDown()) || (this.wasd && this.wasd.s.isDown); }
     startTimer() { this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.lose(); }); }
     startSurvivalTimer() { this.gameTimer = this.time.delayedCall(this.duration, () => { if (!this.hasEnded) this.win(); }); }
     update() {
@@ -596,7 +603,7 @@ class BaseMicrogame extends Phaser.Scene {
 // MINISPIELE
 class ClickTheButton extends BaseMicrogame {
     constructor() { super({ key: 'ClickTheButton' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'KLICK!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const pos = this.spawnAwayFromCursor(180); const btn = this.add.rectangle(pos.x, pos.y, 160, 90, 0x00ff88).setInteractive({ useHandCursor: true }); btn.setStrokeStyle(4, 0xffffff); this.add.text(pos.x, pos.y, 'KLICK!', { font: 'bold 26px Orbitron', fill: '#000' }).setOrigin(0.5); btn.on('pointerdown', () => { if (!this.inputBufferActive) this.win(); }); btn.on('pointerover', () => btn.setScale(1.1)); btn.on('pointerout', () => btn.setScale(1)); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'KLICK!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const pos = this.spawnAwayFromCursor(180); const btn = this.add.rectangle(pos.x, pos.y, 160, 90, 0x00ff88).setInteractive({ useHandCursor: true }); btn.setStrokeStyle(4, 0xffffff); this.add.text(pos.x, pos.y, 'KLICK!', { font: 'bold 26px Orbitron', fill: '#000' }).setOrigin(0.5); const doClick = () => { if (!this.inputBufferActive) this.win(); }; btn.on('pointerdown', doClick); this.input.keyboard.on('keydown-SPACE', doClick); btn.on('pointerover', () => btn.setScale(1.1)); btn.on('pointerout', () => btn.setScale(1)); this.startTimer(); }
 }
 
 class DodgeTheBall extends BaseMicrogame {
@@ -630,8 +637,8 @@ class DodgeTheBall extends BaseMicrogame {
 
         // Spieler Bewegung
         this.player.body.setVelocityX(0);
-        if (this.cursors.left.isDown) this.player.body.setVelocityX(-400);
-        else if (this.cursors.right.isDown) this.player.body.setVelocityX(400);
+        if (this.isLeft()) this.player.body.setVelocityX(-400);
+        else if (this.isRight()) this.player.body.setVelocityX(400);
 
         // Kollision prüfen
         const playerBounds = this.player.getBounds();
@@ -653,7 +660,7 @@ class MashTheKey extends BaseMicrogame {
 
 class StopTheBar extends BaseMicrogame {
     constructor() { super({ key: 'StopTheBar' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'STOPP!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.rectangle(400, 300, 80, 150, 0x00ff88, 0.3); this.add.rectangle(400, 300, 80, 150).setStrokeStyle(4, 0x00ff88); this.movingBar = this.add.rectangle(100, 300, 25, 150, 0xff6b6b); this.tweens.add({ targets: this.movingBar, x: 700, duration: Math.max(400, 800 / this.gameSpeed), ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.input.keyboard.on('keydown-SPACE', () => { if (this.hasEnded || this.inputBufferActive) return; if (this.movingBar.x >= 360 && this.movingBar.x <= 440) this.win(); else this.lose(); }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'STOPP!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.rectangle(400, 300, 80, 150, 0x00ff88, 0.3); this.add.rectangle(400, 300, 80, 150).setStrokeStyle(4, 0x00ff88); this.movingBar = this.add.rectangle(100, 300, 25, 150, 0xff6b6b); this.tweens.add({ targets: this.movingBar, x: 700, duration: Math.max(400, 800 / this.gameSpeed), ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); const doStop = () => { if (this.hasEnded || this.inputBufferActive) return; if (this.movingBar.x >= 360 && this.movingBar.x <= 440) this.win(); else this.lose(); }; this.input.keyboard.on('keydown-SPACE', doStop); this.input.on('pointerdown', doStop); this.startTimer(); }
 }
 
 class CatchTheGem extends BaseMicrogame {
@@ -679,12 +686,12 @@ class ConnectTheLovers extends BaseMicrogame {
 
 class PumpTheBalloon extends BaseMicrogame {
     constructor() { super({ key: 'PumpTheBalloon' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'PUMPEN!', { font: 'bold 48px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5); this.add.text(400, 500, '← → abwechselnd', { font: '22px Orbitron', fill: '#888' }).setOrigin(0.5); this.balloon = this.add.circle(400, 280, 50, 0xff6b6b); this.balloon.setStrokeStyle(3, 0xffffff); this.pumps = 0; this.targetPumps = 10; this.lastKey = null; this.pumpText = this.add.text(400, 420, '0 / ' + this.targetPumps, { font: 'bold 32px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; if (e.keyCode === 37 && this.lastKey !== 'left') { this.pumps++; this.lastKey = 'left'; } else if (e.keyCode === 39 && this.lastKey !== 'right') { this.pumps++; this.lastKey = 'right'; } this.balloon.setScale(1 + (this.pumps / this.targetPumps) * 0.8); this.pumpText.setText(this.pumps + ' / ' + this.targetPumps); if (this.pumps >= this.targetPumps) this.win(); }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'PUMPEN!', { font: 'bold 48px Orbitron', fill: '#ff6b6b' }).setOrigin(0.5); this.add.text(400, 500, '← → oder A D abwechselnd', { font: '22px Orbitron', fill: '#888' }).setOrigin(0.5); this.balloon = this.add.circle(400, 280, 50, 0xff6b6b); this.balloon.setStrokeStyle(3, 0xffffff); this.pumps = 0; this.targetPumps = 10; this.lastKey = null; this.pumpText = this.add.text(400, 420, '0 / ' + this.targetPumps, { font: 'bold 32px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; if ((e.keyCode === 37 || e.keyCode === 65) && this.lastKey !== 'left') { this.pumps++; this.lastKey = 'left'; } else if ((e.keyCode === 39 || e.keyCode === 68) && this.lastKey !== 'right') { this.pumps++; this.lastKey = 'right'; } this.balloon.setScale(1 + (this.pumps / this.targetPumps) * 0.8); this.pumpText.setText(this.pumps + ' / ' + this.targetPumps); if (this.pumps >= this.targetPumps) this.win(); }); this.startTimer(); }
 }
 
 class Safecracker extends BaseMicrogame {
     constructor() { super({ key: 'Safecracker' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#4a69bd'); this.codeLength = 3 + Math.floor((this.gameSpeed - 1) * 2); this.code = []; this.playerIndex = 0; const arrows = ['◀', '▲', '▶', '▼']; for (let i = 0; i < this.codeLength; i++) this.code.push(Phaser.Math.Between(0, 3)); this.add.text(400, 200, this.code.map(d => arrows[d]).join(' '), { font: 'bold 56px Orbitron', fill: '#fff' }).setOrigin(0.5); this.add.text(400, 340, 'Gib den Code ein!', { font: '32px Orbitron', fill: '#fdcb6e' }).setOrigin(0.5); this.inputDisplay = this.add.text(400, 420, '', { font: '40px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const keyMap = { 37: 0, 38: 1, 39: 2, 40: 3 }; this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; const dir = keyMap[e.keyCode]; if (dir === undefined) return; if (dir === this.code[this.playerIndex]) { this.playerIndex++; this.inputDisplay.setText(this.inputDisplay.text + '✓ '); if (this.playerIndex === this.codeLength) this.win(); } else { this.inputDisplay.setText('✗').setColor('#ff0000'); this.time.delayedCall(300, () => this.lose()); } }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#4a69bd'); this.codeLength = 3 + Math.floor((this.gameSpeed - 1) * 2); this.code = []; this.playerIndex = 0; const arrows = ['◀', '▲', '▶', '▼']; for (let i = 0; i < this.codeLength; i++) this.code.push(Phaser.Math.Between(0, 3)); this.add.text(400, 200, this.code.map(d => arrows[d]).join(' '), { font: 'bold 56px Orbitron', fill: '#fff' }).setOrigin(0.5); this.add.text(400, 340, 'Gib den Code ein!', { font: '32px Orbitron', fill: '#fdcb6e' }).setOrigin(0.5); this.inputDisplay = this.add.text(400, 420, '', { font: '40px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const keyMap = { 37: 0, 38: 1, 39: 2, 40: 3, 65: 0, 87: 1, 68: 2, 83: 3 }; this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; const dir = keyMap[e.keyCode]; if (dir === undefined) return; if (dir === this.code[this.playerIndex]) { this.playerIndex++; this.inputDisplay.setText(this.inputDisplay.text + '✓ '); if (this.playerIndex === this.codeLength) this.win(); } else { this.inputDisplay.setText('✗').setColor('#ff0000'); this.time.delayedCall(300, () => this.lose()); } }); this.startTimer(); }
 }
 
 class MatchTheShape extends BaseMicrogame {
@@ -694,7 +701,7 @@ class MatchTheShape extends BaseMicrogame {
 
 class HitTheTarget extends BaseMicrogame {
     constructor() { super({ key: 'HitTheTarget' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'TRIFF!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.target = this.add.circle(400, 300, 60, 0xff6b6b); this.target.setStrokeStyle(6, 0x00ff88); this.tweens.add({ targets: this.target, x: { from: 150, to: 650 }, duration: Math.max(800, 2500 / this.gameSpeed), ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.crosshair = this.add.graphics({ lineStyle: { width: 4, color: 0x00ff88 } }); this.crosshair.lineBetween(-30, 0, 30, 0); this.crosshair.lineBetween(0, -30, 0, 30); this.input.on('pointerdown', (p) => { if (this.hasEnded || this.inputBufferActive) return; if (Phaser.Math.Distance.Between(p.x, p.y, this.target.x, this.target.y) <= 80) this.win(); else this.lose(); }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 60, 'TRIFF!', { font: 'bold 48px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.target = this.add.circle(400, 300, 60, 0xff6b6b); this.target.setStrokeStyle(6, 0x00ff88); this.tweens.add({ targets: this.target, x: { from: 150, to: 650 }, duration: Math.max(800, 2500 / this.gameSpeed), ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }); this.crosshair = this.add.graphics({ lineStyle: { width: 4, color: 0x00ff88 } }); this.crosshair.lineBetween(-30, 0, 30, 0); this.crosshair.lineBetween(0, -30, 0, 30); const shoot = (p) => { if (this.hasEnded || this.inputBufferActive) return; if (Phaser.Math.Distance.Between(p.x, p.y, this.target.x, this.target.y) <= 80) this.win(); else this.lose(); }; this.input.on('pointerdown', shoot); this.input.keyboard.on('keydown-SPACE', () => shoot(this.input.activePointer)); this.startTimer(); }
     update() { super.update(); this.crosshair.x = this.input.x; this.crosshair.y = this.input.y; }
 }
 
@@ -705,7 +712,7 @@ class TargetClick extends BaseMicrogame {
 
 class MathQuiz extends BaseMicrogame {
     constructor() { super({ key: 'MathQuiz' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#28a745'); const n1 = Phaser.Math.Between(5, 30), n2 = Phaser.Math.Between(1, 15); const isAdd = Phaser.Math.Between(0, 1) === 0; let correctAns = isAdd ? n1 + n2 : Math.max(n1, n2) - Math.min(n1, n2); this.isCorrect = Phaser.Math.Between(0, 1) === 0; let displayedAns = this.isCorrect ? correctAns : correctAns + (Phaser.Math.Between(-3, 3) || 1); const eq = isAdd ? n1 + ' + ' + n2 + ' = ' + displayedAns : Math.max(n1, n2) + ' - ' + Math.min(n1, n2) + ' = ' + displayedAns; this.add.text(400, 250, eq, { font: 'bold 50px Orbitron', fill: '#fff' }).setOrigin(0.5); this.add.text(400, 380, '← Richtig    Falsch →', { font: '26px Orbitron', fill: '#fdcb6e' }).setOrigin(0.5); this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; if (e.keyCode === 37) { if (this.isCorrect) this.win(); else this.lose(); } else if (e.keyCode === 39) { if (!this.isCorrect) this.win(); else this.lose(); } }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#28a745'); const n1 = Phaser.Math.Between(5, 30), n2 = Phaser.Math.Between(1, 15); const isAdd = Phaser.Math.Between(0, 1) === 0; let correctAns = isAdd ? n1 + n2 : Math.max(n1, n2) - Math.min(n1, n2); this.isCorrect = Phaser.Math.Between(0, 1) === 0; let displayedAns = this.isCorrect ? correctAns : correctAns + (Phaser.Math.Between(-3, 3) || 1); const eq = isAdd ? n1 + ' + ' + n2 + ' = ' + displayedAns : Math.max(n1, n2) + ' - ' + Math.min(n1, n2) + ' = ' + displayedAns; this.add.text(400, 250, eq, { font: 'bold 50px Orbitron', fill: '#fff' }).setOrigin(0.5); this.add.text(400, 380, '← A Richtig    Falsch → D', { font: '26px Orbitron', fill: '#fdcb6e' }).setOrigin(0.5); this.input.keyboard.on('keydown', (e) => { if (this.hasEnded || this.inputBufferActive) return; if (e.keyCode === 37 || e.keyCode === 65) { if (this.isCorrect) this.win(); else this.lose(); } else if (e.keyCode === 39 || e.keyCode === 68) { if (!this.isCorrect) this.win(); else this.lose(); } }); this.startTimer(); }
 }
 
 class MemoryClick extends BaseMicrogame {
@@ -727,7 +734,7 @@ class DontPress extends BaseMicrogame {
 
 class StopWatch extends BaseMicrogame {
     constructor() { super({ key: 'StopWatch' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 80, 'STOPP BEI 3.00!', { font: 'bold 38px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.timeCounter = 0; this.isRunning = true; this.timeDisplay = this.add.text(400, 300, '0.00', { font: 'bold 90px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.text(400, 420, 'SPACE zum Stoppen', { font: '22px Orbitron', fill: '#888' }).setOrigin(0.5); this.timerEvent = this.time.addEvent({ delay: 10, callback: () => { if (this.isRunning && !this.hasEnded) { this.timeCounter += 10; this.timeDisplay.setText((this.timeCounter / 1000).toFixed(2)); } }, loop: true }); this.input.keyboard.on('keydown-SPACE', () => { if (!this.isRunning || this.hasEnded || this.inputBufferActive) return; this.isRunning = false; if (Math.abs((this.timeCounter / 1000) - 3.0) <= 0.15) this.win(); else this.lose(); }); this.gameTimer = this.time.delayedCall(6000 / this.gameSpeed, () => { if (!this.hasEnded && this.isRunning) this.lose(); }); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#1a1a2e'); this.add.text(400, 80, 'STOPP BEI 3.00!', { font: 'bold 38px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.timeCounter = 0; this.isRunning = true; this.timeDisplay = this.add.text(400, 300, '0.00', { font: 'bold 90px Orbitron', fill: '#00ff88' }).setOrigin(0.5); this.add.text(400, 420, 'SPACE zum Stoppen', { font: '22px Orbitron', fill: '#888' }).setOrigin(0.5); this.timerEvent = this.time.addEvent({ delay: 10, callback: () => { if (this.isRunning && !this.hasEnded) { this.timeCounter += 10; this.timeDisplay.setText((this.timeCounter / 1000).toFixed(2)); } }, loop: true }); const doStop = () => { if (!this.isRunning || this.hasEnded || this.inputBufferActive) return; this.isRunning = false; if (Math.abs((this.timeCounter / 1000) - 3.0) <= 0.15) this.win(); else this.lose(); }; this.input.keyboard.on('keydown-SPACE', doStop); this.input.on('pointerdown', doStop); this.gameTimer = this.time.delayedCall(6000 / this.gameSpeed, () => { if (!this.hasEnded && this.isRunning) this.lose(); }); }
 }
 
 class SpotTheOdd extends BaseMicrogame {
@@ -743,7 +750,7 @@ class BalanceStick extends BaseMicrogame {
 
 class FastClicker extends BaseMicrogame {
     constructor() { super({ key: 'FastClicker' }); }
-    create() { super.create(); this.cameras.main.setBackgroundColor('#7e22ce'); this.add.text(400, 60, 'SCHNELL KLICKEN!', { font: 'bold 38px Orbitron', fill: '#fff' }).setOrigin(0.5); this.clickCount = 0; this.targetClicks = Math.floor(10 + this.gameSpeed * 3); this.clickDisplay = this.add.text(400, 280, '0 / ' + this.targetClicks, { font: 'bold 58px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const clickZone = this.add.rectangle(400, 280, 350, 180, 0x00ff88, 0.1).setInteractive({ useHandCursor: true }); clickZone.setStrokeStyle(3, 0x00ff88); clickZone.on('pointerdown', () => { if (this.hasEnded || this.inputBufferActive) return; this.clickCount++; this.clickDisplay.setText(this.clickCount + ' / ' + this.targetClicks); if (this.clickCount >= this.targetClicks) this.win(); }); this.startTimer(); }
+    create() { super.create(); this.cameras.main.setBackgroundColor('#7e22ce'); this.add.text(400, 60, 'SCHNELL KLICKEN!', { font: 'bold 38px Orbitron', fill: '#fff' }).setOrigin(0.5); this.clickCount = 0; this.targetClicks = Math.floor(10 + this.gameSpeed * 3); this.clickDisplay = this.add.text(400, 280, '0 / ' + this.targetClicks, { font: 'bold 58px Orbitron', fill: '#00ff88' }).setOrigin(0.5); const clickZone = this.add.rectangle(400, 280, 350, 180, 0x00ff88, 0.1).setInteractive({ useHandCursor: true }); clickZone.setStrokeStyle(3, 0x00ff88); const doClick = () => { if (this.hasEnded || this.inputBufferActive) return; this.clickCount++; this.clickDisplay.setText(this.clickCount + ' / ' + this.targetClicks); if (this.clickCount >= this.targetClicks) this.win(); }; clickZone.on('pointerdown', doClick); this.input.keyboard.on('keydown-SPACE', doClick); this.startTimer(); }
 }
 
 // ZOBEL MINISPIELE
@@ -1291,11 +1298,11 @@ class ZobelRun extends BaseMicrogame {
 
         // Zobel bewegen
         const speed = 8;
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.zobelX -= speed;
             if (this.zobel.setFlipX) this.zobel.setFlipX(true);
         }
-        if (this.cursors.right.isDown) {
+        if (this.isRight()) {
             this.zobelX += speed;
             if (this.zobel.setFlipX) this.zobel.setFlipX(false);
         }
@@ -1389,10 +1396,10 @@ class SwaggySwim extends BaseMicrogame {
         if (this.hasEnded) return;
 
         const speed = 6;
-        if (this.cursors.left.isDown) this.swaggyX -= speed;
-        if (this.cursors.right.isDown) this.swaggyX += speed;
-        if (this.cursors.up.isDown) this.swaggyY -= speed;
-        if (this.cursors.down.isDown) this.swaggyY += speed;
+        if (this.isLeft()) this.swaggyX -= speed;
+        if (this.isRight()) this.swaggyX += speed;
+        if (this.isUp()) this.swaggyY -= speed;
+        if (this.isDown()) this.swaggyY += speed;
 
         this.swaggyX = Phaser.Math.Clamp(this.swaggyX, 30, 770);
         this.swaggyY = Phaser.Math.Clamp(this.swaggyY, 80, 570);
@@ -1656,10 +1663,10 @@ class SwaggyFish extends BaseMicrogame {
         if (this.hasEnded) return;
 
         const speed = 5;
-        if (this.cursors.left.isDown) this.swaggyX -= speed;
-        if (this.cursors.right.isDown) this.swaggyX += speed;
-        if (this.cursors.up.isDown) this.swaggyY -= speed;
-        if (this.cursors.down.isDown) this.swaggyY += speed;
+        if (this.isLeft()) this.swaggyX -= speed;
+        if (this.isRight()) this.swaggyX += speed;
+        if (this.isUp()) this.swaggyY -= speed;
+        if (this.isDown()) this.swaggyY += speed;
 
         this.swaggyX = Phaser.Math.Clamp(this.swaggyX, 40, 760);
         this.swaggyY = Phaser.Math.Clamp(this.swaggyY, 100, 560);
@@ -1730,7 +1737,7 @@ class DudeRun extends BaseMicrogame {
         if (this.hasEnded) return;
 
         // Laufen - schneller!
-        if (this.cursors.right.isDown) {
+        if (this.isRight()) {
             this.distance += 1.0;
             this.distanceText.setText(Math.floor(this.distance) + ' / ' + this.targetDistance + 'm');
             if (this.dude.play) this.dude.play('dude_right', true);
@@ -1793,10 +1800,10 @@ class DudeDodge extends BaseMicrogame {
         if (this.hasEnded) return;
 
         const speed = 7;
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.dudeX -= speed;
             if (this.dude.play) this.dude.play('dude_left', true);
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             this.dudeX += speed;
             if (this.dude.play) this.dude.play('dude_right', true);
         } else if (this.dude.play) {
@@ -1957,19 +1964,19 @@ class KaeppchenCollect extends BaseMicrogame {
 
         const speed = 5;
         let moving = false;
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.playerX -= speed;
             if (this.player.play) this.player.play('kaeppchen_left', true);
             moving = true;
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             this.playerX += speed;
             if (this.player.play) this.player.play('kaeppchen_right', true);
             moving = true;
-        } else if (this.cursors.up.isDown) {
+        } else if (this.isUp()) {
             this.playerY -= speed;
             if (this.player.play) this.player.play('kaeppchen_up', true);
             moving = true;
-        } else if (this.cursors.down.isDown) {
+        } else if (this.isDown()) {
             this.playerY += speed;
             if (this.player.play) this.player.play('kaeppchen_down', true);
             moving = true;
@@ -2054,16 +2061,16 @@ class KaeppchenMaze extends BaseMicrogame {
         let newX = this.playerX;
         let newY = this.playerY;
 
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             newX -= speed;
             if (this.player.play) this.player.play('kaeppchen_left', true);
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             newX += speed;
             if (this.player.play) this.player.play('kaeppchen_right', true);
-        } else if (this.cursors.up.isDown) {
+        } else if (this.isUp()) {
             newY -= speed;
             if (this.player.play) this.player.play('kaeppchen_up', true);
-        } else if (this.cursors.down.isDown) {
+        } else if (this.isDown()) {
             newY += speed;
             if (this.player.play) this.player.play('kaeppchen_down', true);
         }
@@ -2136,16 +2143,16 @@ class KaeppchenDodge extends BaseMicrogame {
         if (this.hasEnded) return;
 
         const speed = 5;
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.playerX -= speed;
             if (this.player.play) this.player.play('kaeppchen_left', true);
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             this.playerX += speed;
             if (this.player.play) this.player.play('kaeppchen_right', true);
-        } else if (this.cursors.up.isDown) {
+        } else if (this.isUp()) {
             this.playerY -= speed;
             if (this.player.play) this.player.play('kaeppchen_up', true);
-        } else if (this.cursors.down.isDown) {
+        } else if (this.isDown()) {
             this.playerY += speed;
             if (this.player.play) this.player.play('kaeppchen_down', true);
         }
@@ -2199,16 +2206,16 @@ class KaeppchenDeliver extends BaseMicrogame {
         if (this.hasEnded) return;
 
         const speed = 6;
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.playerX -= speed;
             if (this.player.play) this.player.play('kaeppchen_left', true);
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             this.playerX += speed;
             if (this.player.play) this.player.play('kaeppchen_right', true);
-        } else if (this.cursors.up.isDown) {
+        } else if (this.isUp()) {
             this.playerY -= speed;
             if (this.player.play) this.player.play('kaeppchen_up', true);
-        } else if (this.cursors.down.isDown) {
+        } else if (this.isDown()) {
             this.playerY += speed;
             if (this.player.play) this.player.play('kaeppchen_down', true);
         }
@@ -2255,7 +2262,7 @@ class EdgarRoll extends BaseMicrogame {
         super.update();
         if (this.hasEnded) return;
 
-        if (this.cursors.right.isDown) {
+        if (this.isRight()) {
             this.distance += 1;
             this.edgarX = Math.min(this.edgarX + 4, 700);
             this.edgar.x = this.edgarX;
@@ -2315,10 +2322,10 @@ class EdgarBounce extends BaseMicrogame {
         if (this.hasEnded) return;
 
         // Horizontale Bewegung
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.edgarX -= 4;
             this.edgar.angle -= 5;
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             this.edgarX += 4;
             this.edgar.angle += 5;
         }
@@ -2410,8 +2417,8 @@ class EdgarGoal extends BaseMicrogame {
 
         if (!this.kicked) {
             // Pfeil bewegen
-            if (this.cursors.left.isDown) this.arrowAngle -= 3;
-            if (this.cursors.right.isDown) this.arrowAngle += 3;
+            if (this.isLeft()) this.arrowAngle -= 3;
+            if (this.isRight()) this.arrowAngle += 3;
             this.arrowAngle = Phaser.Math.Clamp(this.arrowAngle, -150, -30);
 
             const rad = this.arrowAngle * Math.PI / 180;
@@ -2480,10 +2487,10 @@ class EdgarDodge extends BaseMicrogame {
         if (this.hasEnded) return;
 
         const speed = 7;
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.edgarX -= speed;
             this.edgar.angle -= 8;
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             this.edgarX += speed;
             this.edgar.angle += 8;
         }
@@ -2549,8 +2556,8 @@ class ZobelSneeze extends BaseMicrogame {
         super.update();
         if (this.hasEnded) return;
 
-        if (this.cursors.left.isDown) this.basketX -= 8;
-        if (this.cursors.right.isDown) this.basketX += 8;
+        if (this.isLeft()) this.basketX -= 8;
+        if (this.isRight()) this.basketX += 8;
         this.basketX = Phaser.Math.Clamp(this.basketX, 50, 750);
         this.basket.x = this.basketX;
 
@@ -2666,15 +2673,15 @@ class DudeSlide extends BaseMicrogame {
         super.update();
         if (this.hasEnded) return;
 
-        if (this.cursors.left.isDown) this.dudeX -= 6;
-        if (this.cursors.right.isDown) this.dudeX += 6;
+        if (this.isLeft()) this.dudeX -= 6;
+        if (this.isRight()) this.dudeX += 6;
         this.dudeX = Phaser.Math.Clamp(this.dudeX, 30, 770);
         this.dudeY += 2; // Auto slide down
 
         this.dude.x = this.dudeX;
         this.dude.y = this.dudeY;
-        if (this.dude.play && (this.cursors.left.isDown || this.cursors.right.isDown)) {
-            this.dude.play(this.cursors.left.isDown ? 'dude_left' : 'dude_right', true);
+        if (this.dude.play && (this.isLeft() || this.isRight())) {
+            this.dude.play(this.isLeft() ? 'dude_left' : 'dude_right', true);
         }
 
         // Check obstacle collision
@@ -2772,8 +2779,8 @@ class EdgarPinball extends BaseMicrogame {
         if (this.hasEnded) return;
 
         // Flipper bewegen
-        if (this.cursors.left.isDown) this.flipperX -= 8;
-        if (this.cursors.right.isDown) this.flipperX += 8;
+        if (this.isLeft()) this.flipperX -= 8;
+        if (this.isRight()) this.flipperX += 8;
         this.flipperX = Phaser.Math.Clamp(this.flipperX, 80, 720);
         this.flipper.x = this.flipperX;
 
@@ -2914,8 +2921,8 @@ class BossGame extends BaseMicrogame {
 
         // Spieler Bewegung
         this.player.body.setVelocityX(0);
-        if (this.cursors.left.isDown) this.player.body.setVelocityX(-400);
-        else if (this.cursors.right.isDown) this.player.body.setVelocityX(400);
+        if (this.isLeft()) this.player.body.setVelocityX(-400);
+        else if (this.isRight()) this.player.body.setVelocityX(400);
 
         // Spieler-Bullets prüfen
         for (let i = this.playerBullets.length - 1; i >= 0; i--) {
@@ -3164,10 +3171,10 @@ class SwaggyBoss extends BaseMicrogame {
 
         // Swaggy bewegen
         const speed = 5;
-        if (this.cursors.left.isDown) this.swaggyX -= speed;
-        if (this.cursors.right.isDown) this.swaggyX += speed;
-        if (this.cursors.up.isDown) this.swaggyY -= speed;
-        if (this.cursors.down.isDown) this.swaggyY += speed;
+        if (this.isLeft()) this.swaggyX -= speed;
+        if (this.isRight()) this.swaggyX += speed;
+        if (this.isUp()) this.swaggyY -= speed;
+        if (this.isDown()) this.swaggyY += speed;
 
         this.swaggyX = Phaser.Math.Clamp(this.swaggyX, 30, 350);
         this.swaggyY = Phaser.Math.Clamp(this.swaggyY, 100, 520);
@@ -3336,16 +3343,16 @@ class KaeppchenBoss extends BaseMicrogame {
         if (this.hasEnded) return;
 
         const speed = 5;
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.playerX -= speed;
             if (this.player.play) this.player.play('kaeppchen_left', true);
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             this.playerX += speed;
             if (this.player.play) this.player.play('kaeppchen_right', true);
-        } else if (this.cursors.up.isDown) {
+        } else if (this.isUp()) {
             this.playerY -= speed;
             if (this.player.play) this.player.play('kaeppchen_up', true);
-        } else if (this.cursors.down.isDown) {
+        } else if (this.isDown()) {
             this.playerY += speed;
             if (this.player.play) this.player.play('kaeppchen_down', true);
         }
@@ -3464,9 +3471,9 @@ class EdgarBoss extends BaseMicrogame {
         if (this.hasEnded) return;
 
         // Paddle bewegen
-        if (this.cursors.left.isDown) {
+        if (this.isLeft()) {
             this.paddleX -= 8;
-        } else if (this.cursors.right.isDown) {
+        } else if (this.isRight()) {
             this.paddleX += 8;
         }
         this.paddleX = Phaser.Math.Clamp(this.paddleX, 60, 740);
