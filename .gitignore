@@ -1,0 +1,4 @@
+# Lokale Testdateien (nicht Teil des Spiels)
+_test_index.html
+_test_phaser.min.js
+.DS_Store
