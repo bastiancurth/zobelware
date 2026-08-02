@@ -380,6 +380,9 @@ class PlayerDataManager {
                 this.runsPlayed = d.runsPlayed || 0;
                 this.bestSpeed = d.bestSpeed || 1.0;
                 this.modeHighScores = d.modeHighScores || {};
+                this.clearedStages = Array.isArray(d.clearedStages) ? d.clearedStages : [];
+                this.stageHighScores = d.stageHighScores || {};
+                this.seenStories = Array.isArray(d.seenStories) ? d.seenStories : [];
                 this.musicEnabled = d.musicEnabled !== false;
                 this.sfxEnabled = d.sfxEnabled !== false;
                 // Sicherstellen, dass Basis-Items nie fehlen (z.B. nach altem Spielstand)
@@ -400,6 +403,7 @@ class PlayerDataManager {
         this.totalWins = 0; this.totalPlayed = 0; this.bossWins = 0;
         this.bestCombo = 0; this.totalCoinsEarned = 0; this.runsPlayed = 0;
         this.bestSpeed = 1.0; this.modeHighScores = {};
+        this.clearedStages = []; this.stageHighScores = {}; this.seenStories = [];
         this.musicEnabled = true; this.sfxEnabled = true;
     }
     saveData() {
@@ -414,6 +418,8 @@ class PlayerDataManager {
                 bestCombo: this.bestCombo, totalCoinsEarned: this.totalCoinsEarned,
                 runsPlayed: this.runsPlayed, bestSpeed: this.bestSpeed,
                 modeHighScores: this.modeHighScores,
+                clearedStages: this.clearedStages, stageHighScores: this.stageHighScores,
+                seenStories: this.seenStories,
                 musicEnabled: this.musicEnabled, sfxEnabled: this.sfxEnabled
             }));
         } catch (e) {}
@@ -440,6 +446,26 @@ class PlayerDataManager {
     setParticles(p) { this.activeParticles = p; this.saveData(); }
     // Wie viele verschiedene Minispiele wurden mindestens einmal gewonnen?
     distinctGamesWon() { return Object.values(this.gameStats).filter(s => s.won > 0).length; }
+
+    // ---- Stadt / Stages ----
+    hasCleared(charKey) { return this.clearedStages.includes(charKey); }
+    clearStage(charKey) {
+        if (!this.clearedStages.includes(charKey)) { this.clearedStages.push(charKey); this.saveData(); return true; }
+        return false;
+    }
+    // Die erste Stage ist immer offen, jede weitere wird durch die vorherige freigeschaltet
+    isStageUnlocked(charKey, order) {
+        const idx = order.indexOf(charKey);
+        if (idx <= 0) return true;
+        return this.hasCleared(order[idx - 1]);
+    }
+    updateStageHighScore(charKey, score) {
+        const prev = this.stageHighScores[charKey] || 0;
+        if (score > prev) { this.stageHighScores[charKey] = score; this.saveData(); return true; }
+        return false;
+    }
+    hasSeenStory(id) { return this.seenStories.includes(id); }
+    markStorySeen(id) { if (!this.seenStories.includes(id)) { this.seenStories.push(id); this.saveData(); } }
 }
 const playerData = new PlayerDataManager();
 // Gespeicherte Ton-Einstellungen auf die Audio-Engine übertragen
@@ -499,6 +525,8 @@ const GameModes = {
     hardcore:  { id: 'hardcore',  name: 'Hardcore',    icon: '💀', desc: '1 Leben • schneller • doppelte Münzen', lives: 1, speedStep: 0.14, bossEvery: 8,  startSpeed: 1.2 },
     marathon:  { id: 'marathon',  name: 'Marathon',    icon: '🏃', desc: '5 Leben • langsamer Anstieg',        lives: 5, speedStep: 0.05, bossEvery: 12, startSpeed: 1.0 },
     bossrush:  { id: 'bossrush',  name: 'Boss-Rush',   icon: '👹', desc: 'Nur Bosse • 3 Leben',                lives: 3, speedStep: 0.10, bossEvery: 1,  startSpeed: 1.0 },
+    // Stage-Modus: eine Figur, feste Länge, danach der Boss - dann ist die Stage geschafft
+    stage:     { id: 'stage',     name: 'Stage',       icon: '🏠', desc: 'Eine Figur • Boss zum Abschluss',    lives: 4, speedStep: 0.10, bossEvery: 12, startSpeed: 1.0, isStage: true },
     get(id) { return this[id] || this.classic; }
 };
 
@@ -555,8 +583,14 @@ const UI = {
 
         c.on('pointerover', () => { redraw('over'); scene.tweens.add({ targets: c, scale: 1.05, duration: 110, ease: 'Quad.easeOut' }); });
         c.on('pointerout',  () => { redraw('idle'); scene.tweens.add({ targets: c, scale: 1.0,  duration: 110, ease: 'Quad.easeOut' }); });
-        c.on('pointerdown', () => { redraw('down'); musicEngine.playSFX('click'); });
-        c.on('pointerup',   () => { redraw('over'); if (opts.onClick) opts.onClick(); });
+        c.on('pointerdown', () => { redraw('down'); musicEngine.initialize(); musicEngine.playSFX('click'); });
+        c.on('pointerup',   () => {
+            redraw('over');
+            // Erst im nächsten Tick auslösen: startet man eine Szene direkt im
+            // pointerup-Handler, bleibt der Zeigerstatus hängen und jeder zweite
+            // Klick wird verschluckt.
+            if (opts.onClick) scene.time.delayedCall(0, () => opts.onClick());
+        });
         return c;
     },
 
@@ -738,6 +772,21 @@ const CharacterManager = {
             image: 'zobel',
             scale: 0.25,  // Zobel.png ist ca. 330x200px
             jingleNotes: [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25],
+            stageName: 'Zobels Nussjagd',
+            location: 'Waldhöhle',
+            genre: 'NATUR',
+            buildingColor: 0x6b4423,
+            story: {
+                intro: [
+                    'Zobel hat den größten Nussvorrat der ganzen Stadt versteckt.',
+                    'Nur leider hat er vergessen, wo genau.',
+                    'Also hilft nur eins: einfach überall nachsehen!'
+                ],
+                outro: [
+                    'Der Vorrat ist gefunden!',
+                    'Leider hat ihn längst jemand leer gefuttert. Zobel schläft trotzdem zufrieden ein.'
+                ]
+            },
             games: [
                 { key: 'ZobelFrogger', name: 'ÜBERQUEREN!', duration: 6000, keys: '← ↑ → ↓', music: 'tense' },
                 { key: 'ZobelJump', name: 'SPRINGEN!', duration: 5000, keys: 'SPACE', music: 'action' },
@@ -766,6 +815,21 @@ const CharacterManager = {
             image: 'swaggy',
             scale: 0.12,  // swaggy.png ist ca. 480x480px Pixel-Art
             jingleNotes: [392, 440, 523.25, 659.25, 523.25, 440, 392],
+            stageName: 'Swaggys Poolparty',
+            location: 'Aquarium',
+            genre: 'PARTY',
+            buildingColor: 0x0a6e94,
+            story: {
+                intro: [
+                    'Swaggy ist der coolste Fisch weit und breit.',
+                    'Heute Abend steigt die größte Poolparty des Jahres.',
+                    'Blöd nur, dass ein Hai die Einladung auch bekommen hat.'
+                ],
+                outro: [
+                    'Der Hai ist besiegt - und tanzt jetzt einfach mit.',
+                    'Die Party geht bis zum Morgengrauen.'
+                ]
+            },
             games: [
                 { key: 'SwaggySwim', name: 'SCHWIMMEN!', duration: 5000, keys: '← ↑ → ↓', music: 'happy' },
                 { key: 'SwaggyBubble', name: 'BLASEN!', duration: 4000, keys: 'SPACE', music: 'calm' },
@@ -793,6 +857,21 @@ const CharacterManager = {
             scale: 3.0,  // Trashi ist kleines Pixel-Art, muss vergrößert werden
             frameWidth: 32,  // Spritesheet frame width
             jingleNotes: [261.63, 329.63, 392, 523.25, 392, 329.63],
+            stageName: 'Trashis Schrottplatz',
+            location: 'Schrottplatz',
+            genre: 'SPORT',
+            buildingColor: 0x3b4a6b,
+            story: {
+                intro: [
+                    'Auf Trashis Schrottplatz landet alles, was die Stadt wegwirft.',
+                    'Heute sucht Trashi den einen perfekten Fund.',
+                    'Der Platzwart sieht das anders. Und hat Boxhandschuhe dabei.'
+                ],
+                outro: [
+                    'Der Platzwart liegt in den Seilen.',
+                    'Trashi nimmt seinen Fund mit. Es ist eine leicht verbogene Gabel.'
+                ]
+            },
             games: [
                 { key: 'DudeRun', name: 'LAUFEN!', duration: 5000, keys: '← →', music: 'action' },
                 { key: 'DudeDodge', name: 'AUSWEICHEN!', duration: 4000, keys: '← →', music: 'tense' },
@@ -822,6 +901,21 @@ const CharacterManager = {
             scale: 1.5,  // 37x64 Spritesheet
             isTopDown: true,  // Top-Down Perspektive
             jingleNotes: [659.25, 783.99, 880, 783.99, 659.25, 523.25],
+            stageName: 'Käppchens Waldweg',
+            location: 'Waldhütte',
+            genre: 'MÄRCHEN',
+            buildingColor: 0x8c2733,
+            story: {
+                intro: [
+                    'Käppchen soll Oma einen vollen Korb vorbeibringen.',
+                    'Der Weg führt quer durch den dunklen Wald.',
+                    'Und irgendwo da draußen wartet er bereits.'
+                ],
+                outro: [
+                    'Der Wolf hat reichlich Äpfel abbekommen.',
+                    'Oma freut sich sehr. Der Korb war eigentlich für den Wolf gedacht.'
+                ]
+            },
             games: [
                 { key: 'KaeppchenCollect', name: 'SAMMELN!', duration: 5000, keys: '← ↑ → ↓', music: 'happy' },
                 { key: 'KaeppchenMaze', name: 'LABYRINTH!', duration: 6000, keys: '← ↑ → ↓', music: 'tense' },
@@ -850,6 +944,21 @@ const CharacterManager = {
             scale: 2.5,  // 32x32 Ball, vergrößert
             isBall: true,  // Rotiert bei Bewegung
             jingleNotes: [440, 523.25, 659.25, 880, 659.25, 523.25],
+            stageName: 'Edgars Arena',
+            location: 'Arena',
+            genre: 'ARCADE',
+            buildingColor: 0x5b2c85,
+            story: {
+                intro: [
+                    'Edgar ist ein Ball. Viel mehr muss man nicht wissen.',
+                    'Heute rollt er einmal quer durch die ganze Stadt.',
+                    'Am Ende der Straße wartet die Arena auf ihn.'
+                ],
+                outro: [
+                    'Edgar hat die Arena besiegt.',
+                    'Er rollt einfach weiter. Er hört nie auf zu rollen.'
+                ]
+            },
             games: [
                 { key: 'EdgarRoll', name: 'ROLLEN!', duration: 4000, keys: '← →', music: 'action' },
                 { key: 'EdgarBounce', name: 'HÜPFEN!', duration: 4000, keys: 'SPACE', music: 'happy' },
@@ -1210,7 +1319,9 @@ class BaseMicrogame extends Phaser.Scene {
         musicEngine.pauseMusic();
         const resumeKeys = [this.scene.key];
         if (this.parentScene) resumeKeys.push(this.parentScene.scene.key);
-        this.scene.launch('PauseScene', { resumeKeys });
+        const returnScene = this.parentScene && this.parentScene.mode && this.parentScene.mode.isStage
+            ? 'CityScene' : 'StartScreen';
+        this.scene.launch('PauseScene', { resumeKeys, returnScene });
         this.scene.pause();
         if (this.parentScene) this.parentScene.scene.pause();
     }
@@ -1226,8 +1337,10 @@ class BaseMicrogame extends Phaser.Scene {
             UI.floatText(this, 400, 250, 'GESCHAFFT!', '#00ff88', 34);
             this.time.delayedCall(900, () => this.restartPractice());
         } else if (this.parentScene) {
-            this.parentScene.microgameWon(this.scene.key);
-            this.scene.stop();
+            this.time.delayedCall(0, () => {
+                this.parentScene.microgameWon(this.scene.key);
+                this.scene.stop();
+            });
         }
     }
 
@@ -1240,8 +1353,10 @@ class BaseMicrogame extends Phaser.Scene {
             UI.floatText(this, 400, 250, 'DANEBEN!', '#ff6b6b', 34);
             this.time.delayedCall(900, () => this.restartPractice());
         } else if (this.parentScene) {
-            this.parentScene.microgameLost(this.scene.key);
-            this.scene.stop();
+            this.time.delayedCall(0, () => {
+                this.parentScene.microgameLost(this.scene.key);
+                this.scene.stop();
+            });
         }
     }
 
@@ -4678,7 +4793,7 @@ class SwatTheFly extends BaseMicrogame {
         });
 
         // Fliegenklatsche folgt der Maus
-        this.swatter = this.add.text(0, 0, '🪥', { font: '48px Arial' }).setOrigin(0.5).setAngle(35).setDepth(10);
+        this.swatter = this.add.text(0, 0, '👋', { font: '46px Arial' }).setOrigin(0.5).setAngle(20).setDepth(10);
 
         // Ziel wechselt sprunghaft die Richtung
         this.pickTarget();
@@ -5670,7 +5785,10 @@ class BootScene extends Phaser.Scene {
 // Pausenmenü - läuft als eigene Szene über dem pausierten Spiel
 class PauseScene extends Phaser.Scene {
     constructor() { super({ key: 'PauseScene' }); }
-    init(data) { this.resumeKeys = (data && data.resumeKeys) || []; }
+    init(data) {
+        this.resumeKeys = (data && data.resumeKeys) || [];
+        this.returnScene = (data && data.returnScene) || 'StartScreen';
+    }
     create() {
         this.add.rectangle(400, 300, 800, 600, 0x05060f, 0.88);
         UI.panel(this, 400, 300, 420, 340, UI.GREEN, 0.08);
@@ -5710,7 +5828,7 @@ class PauseScene extends Phaser.Scene {
             this.scene.stop(key);
         });
         this.scene.stop();
-        this.scene.start('StartScreen');
+        this.scene.start(this.returnScene || 'StartScreen');
     }
 }
 
@@ -5751,13 +5869,13 @@ class StartScreen extends Phaser.Scene {
         this.createToggle(714, 32, '🎵', () => musicEngine.toggleMusic(), musicEngine.musicEnabled);
         this.createToggle(762, 32, '🔊', () => musicEngine.toggleSFX(), musicEngine.sfxEnabled);
 
-        this.add.text(400, 578, 'ESC = Pause / Zurück  •  WASD oder Pfeiltasten  •  P = Pause',
+        this.add.text(400, 578, 'Zobel-Stadt: jede Figur hat ihre eigene Stage  •  WASD oder Pfeiltasten  •  ESC/P = Pause',
             { font: '11px Orbitron', fill: '#4d5468' }).setOrigin(0.5);
 
         // Erste Nutzerinteraktion schaltet die Audio-Engine frei
         this.input.once('pointerdown', () => musicEngine.initialize());
         this.input.keyboard.once('keydown', () => musicEngine.initialize());
-        this.input.keyboard.on('keydown-ENTER', () => this.scene.start('ModeSelectScene'));
+        this.input.keyboard.on('keydown-ENTER', () => this.scene.start('CityScene'));
     }
 
     createCharacterShowcase() {
@@ -5851,7 +5969,7 @@ class StartScreen extends Phaser.Scene {
 
     createMenuButtons() {
         UI.button(this, 400, 424, 280, 58, '▶  SPIELEN', {
-            fontSize: 24, onClick: () => this.scene.start('ModeSelectScene')
+            fontSize: 24, onClick: () => this.scene.start('CityScene')
         });
         const small = [
             { text: 'ALBUM', x: 175, color: UI.CYAN, scene: 'AlbumScene' },
@@ -5878,16 +5996,507 @@ class StartScreen extends Phaser.Scene {
 }
 
 // Modusauswahl: Spielmodus und optional ein fester Charakter
+// ZOBEL-STADT: Auswahlkarte im Stil eines Stadtplans.
+// Jede Figur hat hier ihr eigenes Gebäude (= Stage), in der Mitte steht der
+// Turm für den Wilden Mix, in dem alle Figuren durcheinander gespielt werden.
+class CityScene extends Phaser.Scene {
+    constructor() { super({ key: 'CityScene' }); }
+    init(data) { this.justCleared = (data && data.justCleared) || null; }
+
+    create() {
+        this.cameras.main.setBackgroundColor('#080a1c');
+        this.order = CharacterManager.characters;
+        this.buildings = {};   // Szenen-Instanz wird wiederverwendet - alte Verweise verwerfen
+
+        this.drawSky();
+        this.drawSkyline();
+        this.drawStreet();
+        this.drawMixTower();
+        this.drawBuildings();
+        this.drawInfoBar();
+        this.drawTopBar();
+
+        // Wenn gerade eine Stage geschafft wurde: neue Freischaltung feiern
+        if (this.justCleared) this.celebrateUnlock(this.justCleared);
+
+        this.input.keyboard.on('keydown-ESC', () => this.scene.start('StartScreen'));
+    }
+
+    // ---------- Kulisse ----------
+    drawSky() {
+        const g = this.add.graphics().setDepth(-100);
+        const steps = 30;
+        const from = Phaser.Display.Color.ValueToColor(0x1b1040);
+        const to = Phaser.Display.Color.ValueToColor(0x070914);
+        for (let i = 0; i < steps; i++) {
+            const c = Phaser.Display.Color.Interpolate.ColorWithColor(from, to, steps, i);
+            g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
+            g.fillRect(0, (600 / steps) * i, 800, 600 / steps + 1);
+        }
+        UI.starfield(this, 45, 0xffffff);
+
+        // Mond
+        this.add.circle(690, 78, 30, 0xf5f0d0, 0.9).setDepth(-90);
+        this.add.circle(690, 78, 46, 0xf5f0d0, 0.10).setDepth(-91);
+    }
+
+    drawSkyline() {
+        // Silhouetten im Hintergrund mit ein paar erleuchteten Fenstern
+        const g = this.add.graphics().setDepth(-80);
+        let x = -20;
+        while (x < 820) {
+            const w = Phaser.Math.Between(40, 90);
+            const h = Phaser.Math.Between(60, 170);
+            g.fillStyle(0x111634, 1);
+            g.fillRect(x, 330 - h, w, h + 40);
+            for (let wy = 330 - h + 12; wy < 320; wy += 18) {
+                for (let wx = x + 8; wx < x + w - 8; wx += 16) {
+                    if (Math.random() < 0.35) {
+                        g.fillStyle(Math.random() < 0.5 ? 0xffd93d : 0x00d4ff, 0.5);
+                        g.fillRect(wx, wy, 6, 8);
+                    }
+                }
+            }
+            x += w + Phaser.Math.Between(2, 14);
+        }
+    }
+
+    drawStreet() {
+        const g = this.add.graphics().setDepth(-70);
+        g.fillStyle(0x14172e, 1); g.fillRect(0, 470, 800, 130);
+        g.fillStyle(0x1c2140, 1); g.fillRect(0, 470, 800, 6);
+        // Mittelstreifen
+        g.fillStyle(0x3a4270, 0.8);
+        for (let x = 10; x < 800; x += 46) g.fillRect(x, 524, 24, 4);
+    }
+
+    // ---------- Wilder-Mix-Turm ----------
+    drawMixTower() {
+        const cx = 400, baseY = 448;
+        const c = this.add.container(cx, 0);
+
+        const g = this.add.graphics();
+        g.fillStyle(0x1a1040, 1);
+        g.fillRect(-58, 120, 116, baseY - 120);
+        g.lineStyle(2, 0xff00cc, 0.5);
+        g.strokeRect(-58, 120, 116, baseY - 120);
+        // Neon-Streifen
+        for (let y = 140; y < baseY - 10; y += 26) {
+            g.fillStyle(y % 52 === 140 % 52 ? 0x00d4ff : 0xff00cc, 0.55);
+            g.fillRect(-48, y, 96, 5);
+        }
+        // Turmspitze
+        g.fillStyle(0x1a1040, 1);
+        g.fillTriangle(-58, 120, 58, 120, 0, 62);
+        g.lineStyle(2, 0xffd93d, 0.8);
+        g.strokeTriangle(-58, 120, 58, 120, 0, 62);
+        c.add(g);
+
+        const beacon = this.add.circle(0, 58, 7, 0xffd93d).setDepth(2);
+        c.add(beacon);
+        this.tweens.add({ targets: beacon, alpha: 0.2, scale: 1.6, duration: 700, yoyo: true, repeat: -1 });
+
+        const sign = this.add.text(0, 176, 'WILDER\nMIX', {
+            font: 'bold 22px Orbitron', fill: '#ffffff', align: 'center',
+            stroke: '#ff00cc', strokeThickness: 4
+        }).setOrigin(0.5);
+        c.add(sign);
+        this.tweens.add({ targets: sign, alpha: 0.72, duration: 900, yoyo: true, repeat: -1 });
+
+        c.add(this.add.text(0, 232, 'alle Figuren gemischt', { font: '10px Orbitron', fill: '#9aa3c8' }).setOrigin(0.5));
+        const best = playerData.modeHighScores.classic || 0;
+        c.add(this.add.text(0, 252, 'Rekord ' + best, { font: '10px Orbitron', fill: '#ffd93d' }).setOrigin(0.5));
+
+        const hit = this.add.rectangle(cx, 190, 130, 270, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
+        hit.on('pointerover', () => { this.showInfo('WILDER MIX', 'Alle Figuren wechseln sich ab - der Klassiker. Modus frei wählbar.', UI.PURPLE); c.setScale(1.03); });
+        hit.on('pointerout', () => { this.clearInfo(); c.setScale(1); });
+        hit.on('pointerdown', () => {
+            musicEngine.initialize(); musicEngine.playSFX('click');
+            this.cameras.main.flash(180, 255, 0, 204);
+            this.time.delayedCall(160, () => this.scene.start('ModeSelectScene'));
+        });
+    }
+
+    // ---------- Figuren-Gebäude ----------
+    drawBuildings() {
+        const positions = [95, 245, 400, 555, 705];
+        this.order.forEach((key, i) => {
+            const char = CharacterManager.data[key];
+            const unlocked = playerData.isStageUnlocked(key, this.order);
+            const cleared = playerData.hasCleared(key);
+            this.drawBuilding(positions[i], 450, char, key, unlocked, cleared);
+        });
+    }
+
+    drawBuilding(x, y, char, key, unlocked, cleared) {
+        const c = this.add.container(x, y).setDepth(10);
+        const w = 128, h = 108;
+
+        const g = this.add.graphics();
+        const body = unlocked ? char.buildingColor : 0x22263f;
+        g.fillStyle(0x000000, 0.5); g.fillRoundedRect(-w / 2 + 4, -h / 2 + 6, w, h, 10);
+        g.fillStyle(body, unlocked ? 0.95 : 0.9); g.fillRoundedRect(-w / 2, -h / 2, w, h, 10);
+        // Dach
+        g.fillStyle(unlocked ? char.color : 0x333a5c, 1);
+        g.fillTriangle(-w / 2 - 8, -h / 2, w / 2 + 8, -h / 2, 0, -h / 2 - 30);
+        g.lineStyle(2, unlocked ? 0xffffff : 0x444c72, unlocked ? 0.85 : 0.5);
+        g.strokeRoundedRect(-w / 2, -h / 2, w, h, 10);
+        c.add(g);
+
+        if (unlocked) {
+            // Figur steht vor ihrem Gebäude
+            let sprite;
+            if (char.image === 'dude' && this.textures.exists('dude')) {
+                sprite = this.add.sprite(0, -4, 'dude', 4).setScale(char.scale * 0.75);
+            } else if (this.textures.exists(char.image)) {
+                sprite = this.add.image(0, -4, char.image).setScale(char.scale * 0.62);
+            } else {
+                sprite = Zobel.draw(this, 0, -4, 0.34, char.color);
+            }
+            c.add(sprite);
+            this.tweens.add({
+                targets: sprite, y: -11, duration: Phaser.Math.Between(900, 1500),
+                yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+            });
+
+            c.add(this.add.text(0, -h / 2 - 44, char.genre, {
+                font: 'bold 9px Orbitron', fill: UI.hex(char.color)
+            }).setOrigin(0.5));
+        } else {
+            c.add(this.add.text(0, -4, '🔒', { font: '34px Arial' }).setOrigin(0.5).setAlpha(0.75));
+        }
+
+        // Namensschild
+        const plate = this.add.graphics();
+        plate.fillStyle(0x000000, 0.65); plate.fillRoundedRect(-w / 2 + 6, h / 2 - 26, w - 12, 20, 5);
+        c.add(plate);
+        c.add(this.add.text(0, h / 2 - 16, unlocked ? char.name : '???', {
+            font: 'bold 12px Orbitron', fill: unlocked ? '#ffffff' : '#6c7590'
+        }).setOrigin(0.5));
+
+        if (cleared) {
+            const star = this.add.text(w / 2 - 14, -h / 2 - 6, '⭐', { font: '18px Arial' }).setOrigin(0.5);
+            c.add(star);
+            this.tweens.add({ targets: star, angle: { from: -12, to: 12 }, duration: 1400, yoyo: true, repeat: -1 });
+        }
+
+        const hit = this.add.rectangle(x, y - 8, w + 16, h + 44, 0xffffff, 0.001)
+            .setInteractive({ useHandCursor: true }).setDepth(11);
+
+        hit.on('pointerover', () => {
+            c.setScale(1.05);
+            if (unlocked) {
+                const best = playerData.stageHighScores[key] || 0;
+                this.showInfo(char.stageName.toUpperCase(),
+                    char.location + '  •  ' + char.genre + '  •  Rekord ' + best +
+                    (cleared ? '  •  geschafft ⭐' : ''), char.color);
+            } else {
+                const idx = this.order.indexOf(key);
+                const prev = CharacterManager.data[this.order[idx - 1]];
+                this.showInfo('ABGESCHLOSSEN?', 'Schaffe zuerst ' + prev.stageName + ', um hier aufzuschließen.', 0x6c7590);
+            }
+        });
+        hit.on('pointerout', () => { c.setScale(1); this.clearInfo(); });
+        hit.on('pointerdown', () => {
+            if (!unlocked) {
+                musicEngine.playSFX('lose');
+                this.cameras.main.shake(120, 0.006);
+                this.tweens.add({ targets: c, x: { from: x - 5, to: x + 5 }, duration: 50, yoyo: true, repeat: 2, onComplete: () => { c.x = x; } });
+                return;
+            }
+            musicEngine.initialize(); musicEngine.playSFX('click');
+            this.enterStage(key, char);
+        });
+
+        c.stageKey = key;
+        this.buildings[key] = c;
+    }
+
+    // Kurzer Zoom auf das Gebäude, dann Story bzw. direkt die Stage
+    enterStage(key, char) {
+        this.cameras.main.flash(200, (char.color >> 16) & 255, (char.color >> 8) & 255, char.color & 255);
+        this.time.delayedCall(220, () => {
+            const storyId = key + '_intro';
+            if (!playerData.hasSeenStory(storyId)) {
+                this.scene.start('StoryScene', { character: key, type: 'intro' });
+            } else {
+                this.scene.start('GameScene', { mode: 'stage', soloCharacter: key });
+            }
+        });
+    }
+
+    // ---------- Kopf- und Fußleiste ----------
+    drawTopBar() {
+        const g = this.add.graphics().setDepth(60);
+        g.fillStyle(0x000000, 0.55); g.fillRoundedRect(8, 8, 784, 42, 10);
+        g.lineStyle(2, 0x00ff88, 0.25); g.strokeRoundedRect(8, 8, 784, 42, 10);
+
+        const title = this.add.text(24, 29, 'ZOBEL-STADT', { font: 'bold 20px Orbitron', fill: '#00ff88' }).setOrigin(0, 0.5).setDepth(61);
+        title.setShadow(0, 0, '#00ff88', 10, false, true);
+
+        const done = playerData.clearedStages.length;
+        this.add.text(400, 29, done + ' / ' + this.order.length + ' Stages geschafft', {
+            font: '12px Orbitron', fill: '#9aa3c8'
+        }).setOrigin(0.5).setDepth(61);
+        this.add.text(776, 29, '💰 ' + playerData.coins, { font: 'bold 14px Orbitron', fill: '#ffd93d' }).setOrigin(1, 0.5).setDepth(61);
+
+        UI.button(this, 62, 570, 108, 34, '← MENÜ', { color: UI.RED, filled: false, fontSize: 12, onClick: () => this.scene.start('StartScreen') });
+        UI.button(this, 738, 570, 108, 34, 'ALBUM', { color: UI.CYAN, filled: false, fontSize: 12, onClick: () => this.scene.start('AlbumScene') });
+    }
+
+    drawInfoBar() {
+        this.infoBg = this.add.graphics().setDepth(59);
+        this.infoTitle = this.add.text(400, 556, '', { font: 'bold 14px Orbitron', fill: '#ffffff' }).setOrigin(0.5).setDepth(61);
+        this.infoText = this.add.text(400, 578, '', { font: '11px Orbitron', fill: '#9aa3c8' }).setOrigin(0.5).setDepth(61);
+        this.clearInfo();
+    }
+
+    showInfo(title, text, color) {
+        this.infoBg.clear();
+        this.infoBg.fillStyle(0x000000, 0.6); this.infoBg.fillRoundedRect(180, 542, 440, 48, 9);
+        this.infoBg.lineStyle(2, color, 0.7); this.infoBg.strokeRoundedRect(180, 542, 440, 48, 9);
+        this.infoTitle.setText(title).setColor(UI.hex(color === 0x6c7590 ? 0xffffff : color));
+        this.infoText.setText(text);
+    }
+
+    clearInfo() {
+        this.infoBg.clear();
+        this.infoTitle.setText('Wähle ein Gebäude');
+        this.infoText.setText('Jede Figur hat ihre eigene Stage - in der Mitte wartet der wilde Mix');
+        this.infoTitle.setColor('#ffffff');
+    }
+
+    // Feiert die frisch freigeschaltete nächste Stage
+    celebrateUnlock(clearedKey) {
+        const idx = this.order.indexOf(clearedKey);
+        const nextKey = this.order[idx + 1];
+        if (!nextKey || !this.buildings || !this.buildings[nextKey]) return;
+        const target = this.buildings[nextKey];
+        const nextChar = CharacterManager.data[nextKey];
+
+        this.time.delayedCall(400, () => {
+            musicEngine.playSFX('win');
+            Effects.burst(this, target.x, target.y, nextChar.color, 22, 180);
+            Effects.ring(this, target.x, target.y, nextChar.color, 140);
+            const t = this.add.text(target.x, target.y - 110, 'NEU!', {
+                font: 'bold 26px Orbitron', fill: '#ffd93d', stroke: '#000000', strokeThickness: 5
+            }).setOrigin(0.5).setDepth(70).setScale(0);
+            this.tweens.add({ targets: t, scale: 1, duration: 300, ease: 'Back.easeOut' });
+            this.tweens.add({ targets: target, scaleX: 1.12, scaleY: 1.12, duration: 260, yoyo: true, repeat: 3 });
+            this.time.delayedCall(2200, () => this.tweens.add({ targets: t, alpha: 0, duration: 300, onComplete: () => t.destroy() }));
+        });
+    }
+}
+
+// STORY-SZENE: kurze Bildtafeln vor und nach einer Stage
+class StoryScene extends Phaser.Scene {
+    constructor() { super({ key: 'StoryScene' }); }
+    init(data) {
+        this.charKey = data.character;
+        this.type = data.type || 'intro';       // 'intro' oder 'outro'
+        this.stageScore = data.score || 0;
+        // Phaser verwendet dieselbe Szenen-Instanz wieder - Zustand zurücksetzen,
+        // sonst blockiert das Flag vom Intro später den Abspann.
+        this.isFinishing = false;
+    }
+
+    create() {
+        const char = CharacterManager.data[this.charKey];
+        this.char = char;
+        this.panels = char.story[this.type];
+        this.index = 0;
+
+        this.cameras.main.setBackgroundColor('#07070f');
+        this.drawBackdrop(char);
+
+        // Kopfzeile mit Stage-Namen und Genre
+        const headerShade = this.add.graphics().setDepth(15);
+        headerShade.fillStyle(0x000000, 0.55);
+        headerShade.fillRect(0, 0, 800, 108);
+        const stageTitle = this.add.text(400, 54, char.stageName.toUpperCase(), {
+            font: 'bold 30px Orbitron', fill: '#ffffff', stroke: UI.hex(char.color), strokeThickness: 5
+        }).setOrigin(0.5).setDepth(20);
+        stageTitle.setShadow(0, 3, '#000000', 6);
+        this.add.text(400, 88, char.genre + '  •  ' + char.location, {
+            font: '12px Orbitron', fill: '#9aa3c8'
+        }).setOrigin(0.5).setDepth(20);
+
+        // Figur
+        this.sprite = this.makeSprite(char, 400, 268);
+        this.tweens.add({ targets: this.sprite, y: 254, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+        // Sprechtafel
+        this.boxG = this.add.graphics().setDepth(20);
+        this.boxG.fillStyle(0x000000, 0.8); this.boxG.fillRoundedRect(90, 386, 620, 108, 12);
+        this.boxG.lineStyle(3, char.color, 0.9); this.boxG.strokeRoundedRect(90, 386, 620, 108, 12);
+
+        this.panelText = this.add.text(400, 432, '', {
+            font: '17px Orbitron', fill: '#ffffff', align: 'center',
+            wordWrap: { width: 560 }
+        }).setOrigin(0.5).setDepth(21);
+
+        this.pageDots = this.add.graphics().setDepth(21);
+        this.nextHint = this.add.text(676, 476, '▶', { font: 'bold 18px Orbitron', fill: UI.hex(char.color) }).setOrigin(0.5).setDepth(21);
+        this.tweens.add({ targets: this.nextHint, alpha: 0.3, duration: 600, yoyo: true, repeat: -1 });
+
+        this.add.text(400, 528, 'Klick / SPACE = weiter    •    ESC = überspringen', {
+            font: '11px Orbitron', fill: '#4d5468'
+        }).setOrigin(0.5).setDepth(21);
+
+        this.showPanel();
+        CharacterManager.setCharacter(this.charKey);
+        CharacterManager.playJingle(1.0);
+
+        this.input.on('pointerdown', () => this.advance());
+        this.input.keyboard.on('keydown-SPACE', () => this.advance());
+        this.input.keyboard.on('keydown-ENTER', () => this.advance());
+        this.input.keyboard.on('keydown-ESC', () => this.finish());
+    }
+
+    drawBackdrop(char) {
+        const g = this.add.graphics().setDepth(-10);
+        const from = Phaser.Display.Color.ValueToColor(char.buildingColor);
+        const to = Phaser.Display.Color.ValueToColor(0x05050c);
+        for (let i = 0; i < 30; i++) {
+            const c = Phaser.Display.Color.Interpolate.ColorWithColor(from, to, 30, i);
+            g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
+            g.fillRect(0, 20 * i, 800, 21);
+        }
+        // Strahlen hinter der Figur
+        const rays = this.add.graphics().setDepth(-5);
+        rays.fillStyle(char.color, 0.10);
+        for (let i = 0; i < 12; i++) {
+            const a = (Math.PI * 2 * i) / 12;
+            rays.fillTriangle(400, 268, 400 + Math.cos(a) * 500, 268 + Math.sin(a) * 500,
+                400 + Math.cos(a + 0.13) * 500, 268 + Math.sin(a + 0.13) * 500);
+        }
+        this.tweens.add({ targets: rays, angle: 360, duration: 40000, repeat: -1 });
+        rays.setPosition(0, 0);
+    }
+
+    makeSprite(char, x, y) {
+        if (char.image === 'dude' && this.textures.exists('dude')) {
+            const s = this.add.sprite(x, y, 'dude', 4).setScale(char.scale * 1.5).setDepth(10);
+            if (s.play) s.play('dude_idle');
+            return s;
+        }
+        if (this.textures.exists(char.image)) return this.add.image(x, y, char.image).setScale(char.scale * 1.2).setDepth(10);
+        return Zobel.draw(this, x, y, 0.8, char.color).setDepth(10);
+    }
+
+    showPanel() {
+        const text = this.panels[this.index];
+        this.panelText.setText(text);
+        this.panelText.setAlpha(0);
+        this.tweens.add({ targets: this.panelText, alpha: 1, duration: 220 });
+        this.tweens.add({ targets: this.sprite, scaleX: this.sprite.scaleX * 1.06, scaleY: this.sprite.scaleY * 1.06, duration: 130, yoyo: true });
+        musicEngine.playSFX('click');
+
+        // Seitenpunkte
+        this.pageDots.clear();
+        const n = this.panels.length, gap = 16, startX = 400 - ((n - 1) * gap) / 2;
+        for (let i = 0; i < n; i++) {
+            this.pageDots.fillStyle(i === this.index ? this.char.color : 0x39405c, 1);
+            this.pageDots.fillCircle(startX + i * gap, 476, i === this.index ? 5 : 3.5);
+        }
+        this.nextHint.setText(this.index < n - 1 ? '▶' : '▶▶');
+    }
+
+    advance() {
+        this.index++;
+        if (this.index >= this.panels.length) this.finish();
+        else this.showPanel();
+    }
+
+    finish() {
+        if (this.isFinishing) return;
+        this.isFinishing = true;
+        playerData.markStorySeen(this.charKey + '_' + this.type);
+        // Abblenden über ein eigenes Rechteck statt über cameras.main.fade():
+        // ein laufender Kamera-Effekt beim Szenenwechsel blockiert sonst die
+        // Klicks im nächsten Bildschirm.
+        const veil = this.add.rectangle(400, 300, 800, 600, 0x000000, 0).setDepth(900);
+        this.tweens.add({ targets: veil, alpha: 1, duration: 220 });
+        this.time.delayedCall(240, () => {
+            if (this.type === 'intro') {
+                this.scene.start('GameScene', { mode: 'stage', soloCharacter: this.charKey });
+            } else {
+                this.scene.start('StageClearScene', { character: this.charKey, score: this.stageScore });
+            }
+        });
+    }
+}
+
+// Abschlussbildschirm einer Stage
+class StageClearScene extends Phaser.Scene {
+    constructor() { super({ key: 'StageClearScene' }); }
+    init(data) { this.charKey = data.character; this.score = data.score || 0; }
+
+    create() {
+        const char = CharacterManager.data[this.charKey];
+        this.cameras.main.setBackgroundColor('#07120c');
+        UI.starfield(this, 40, char.color);
+        Effects.confetti(this, 70);
+        musicEngine.playSFX('win');
+
+        const title = this.add.text(400, 96, 'STAGE GESCHAFFT!', {
+            font: 'bold 46px Orbitron', fill: '#ffd93d', stroke: '#ff6600', strokeThickness: 5
+        }).setOrigin(0.5).setScale(0.3);
+        this.tweens.add({ targets: title, scale: 1, duration: 420, ease: 'Back.easeOut' });
+
+        this.add.text(400, 146, char.stageName, { font: 'bold 18px Orbitron', fill: UI.hex(char.color) }).setOrigin(0.5);
+
+        const sprite = (char.image === 'dude' && this.textures.exists('dude'))
+            ? this.add.sprite(400, 262, 'dude', 4).setScale(char.scale * 1.6)
+            : (this.textures.exists(char.image)
+                ? this.add.image(400, 262, char.image).setScale(char.scale * 1.3)
+                : Zobel.draw(this, 400, 262, 0.9, char.color));
+        this.tweens.add({ targets: sprite, y: 244, duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.tweens.add({ targets: sprite, angle: { from: -6, to: 6 }, duration: 620, yoyo: true, repeat: -1 });
+
+        UI.panel(this, 400, 396, 460, 96, char.color, 0.1);
+        this.add.text(400, 372, 'Punkte: ' + this.score, { font: 'bold 26px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+        const best = playerData.stageHighScores[this.charKey] || 0;
+        this.add.text(400, 410, 'Stage-Rekord: ' + best, { font: '13px Orbitron', fill: '#ffd93d' }).setOrigin(0.5);
+
+        const order = CharacterManager.characters;
+        const idx = order.indexOf(this.charKey);
+        const nextKey = order[idx + 1];
+        if (nextKey) {
+            this.add.text(400, 458, CharacterManager.data[nextKey].stageName + ' ist jetzt offen!', {
+                font: 'bold 13px Orbitron', fill: '#00d4ff'
+            }).setOrigin(0.5);
+        } else {
+            this.add.text(400, 458, 'Alle Stages geschafft - die ganze Stadt gehört dir!', {
+                font: 'bold 13px Orbitron', fill: '#00d4ff'
+            }).setOrigin(0.5);
+        }
+
+        UI.button(this, 250, 508, 210, 50, '🏙  ZUR STADT', {
+            fontSize: 17, onClick: () => this.scene.start('CityScene', { justCleared: this.charKey })
+        });
+        UI.button(this, 550, 508, 210, 50, '↻ NOCHMAL', {
+            color: UI.CYAN, fontSize: 17,
+            onClick: () => this.scene.start('GameScene', { mode: 'stage', soloCharacter: this.charKey })
+        });
+        UI.button(this, 400, 566, 170, 36, '← MENÜ', {
+            color: UI.RED, filled: false, fontSize: 13, onClick: () => this.scene.start('StartScreen')
+        });
+
+        this.input.keyboard.on('keydown-ESC', () => this.scene.start('CityScene', { justCleared: this.charKey }));
+        this.input.keyboard.on('keydown-ENTER', () => this.scene.start('CityScene', { justCleared: this.charKey }));
+    }
+}
+
 class ModeSelectScene extends Phaser.Scene {
     constructor() { super({ key: 'ModeSelectScene' }); }
     init(data) {
         this.selectedMode = (data && data.mode) || 'classic';
-        this.soloCharacter = (data && data.soloCharacter) || null;
     }
     create() {
         this.cameras.main.setBackgroundColor('#08081a');
         UI.starfield(this, 40);
-        UI.header(this, 'MODUS WÄHLEN', 'Wie willst du spielen?');
+        UI.header(this, 'WILDER MIX', 'Alle Figuren gemischt - wähle die Spielart', UI.PURPLE);
 
         // ---- Modus-Karten ----
         const modes = ['classic', 'hardcore', 'marathon', 'bossrush'];
@@ -5916,43 +6525,23 @@ class ModeSelectScene extends Phaser.Scene {
             card.on('pointerout', () => card.setScale(1));
             card.on('pointerdown', () => {
                 musicEngine.playSFX('click');
-                this.scene.restart({ mode: id, soloCharacter: this.soloCharacter });
+                this.time.delayedCall(0, () => this.scene.restart({ mode: id }));
             });
         });
 
-        // ---- Charakterauswahl ----
-        this.add.text(400, 338, 'CHARAKTER', { font: 'bold 15px Orbitron', fill: '#8b93aa' }).setOrigin(0.5);
-        const options = [{ id: null, label: 'ALLE', color: UI.GREEN }].concat(
-            CharacterManager.characters.map(c => ({
-                id: c, label: CharacterManager.data[c].name, color: CharacterManager.data[c].color
-            }))
-        );
-        options.forEach((opt, i) => {
-            const x = 90 + i * 104;
-            const active = this.soloCharacter === opt.id;
-            const btn = this.add.container(x, 384);
+        // Im Wilden Mix wechseln sich alle Figuren ab - hier nur zur Ansicht
+        this.add.text(400, 340, 'MIT DABEI', { font: 'bold 13px Orbitron', fill: '#8b93aa' }).setOrigin(0.5);
+        CharacterManager.characters.forEach((key, i) => {
+            const char = CharacterManager.data[key];
+            const x = 190 + i * 105;
             const g = this.add.graphics();
-            g.fillStyle(opt.color, active ? 0.85 : 0.14);
-            g.fillRoundedRect(-46, -24, 92, 48, 10);
-            g.lineStyle(2, opt.color, active ? 1 : 0.5);
-            g.strokeRoundedRect(-46, -24, 92, 48, 10);
-            btn.add(g);
-            btn.add(this.add.text(0, 0, opt.label, {
-                font: 'bold 12px Orbitron', fill: active ? '#0b1220' : '#ffffff'
-            }).setOrigin(0.5));
-            btn.setInteractive(new Phaser.Geom.Rectangle(-46, -24, 92, 48), Phaser.Geom.Rectangle.Contains, { useHandCursor: true });
-            btn.on('pointerover', () => btn.setScale(1.06));
-            btn.on('pointerout', () => btn.setScale(1));
-            btn.on('pointerdown', () => {
-                musicEngine.playSFX('click');
-                this.scene.restart({ mode: this.selectedMode, soloCharacter: opt.id });
-            });
+            g.fillStyle(char.color, 0.18); g.fillRoundedRect(x - 44, 362, 88, 42, 9);
+            g.lineStyle(2, char.color, 0.7); g.strokeRoundedRect(x - 44, 362, 88, 42, 9);
+            this.add.text(x, 383, char.name, { font: 'bold 11px Orbitron', fill: UI.hex(char.color) }).setOrigin(0.5);
         });
-
-        const soloNote = this.soloCharacter
-            ? 'Nur Spiele von ' + CharacterManager.data[this.soloCharacter].name
-            : 'Alle Charaktere wechseln sich ab';
-        this.add.text(400, 424, soloNote, { font: '11px Orbitron', fill: '#6c7590' }).setOrigin(0.5);
+        this.add.text(400, 424, 'Boss alle paar Runden - danach wechselt die Figur', {
+            font: '11px Orbitron', fill: '#6c7590'
+        }).setOrigin(0.5);
 
         // ---- Aktive Boni ----
         const perks = [];
@@ -5968,16 +6557,16 @@ class ModeSelectScene extends Phaser.Scene {
             fontSize: 22,
             onClick: () => {
                 musicEngine.initialize();
-                this.scene.start('GameScene', { mode: this.selectedMode, soloCharacter: this.soloCharacter });
+                this.scene.start('GameScene', { mode: this.selectedMode, soloCharacter: null });
             }
         });
-        UI.button(this, 400, 562, 180, 38, '← ZURÜCK', {
-            color: UI.RED, filled: false, fontSize: 15, onClick: () => this.scene.start('StartScreen')
+        UI.button(this, 400, 562, 190, 38, '← ZUR STADT', {
+            color: UI.RED, filled: false, fontSize: 14, onClick: () => this.scene.start('CityScene')
         });
-        this.input.keyboard.on('keydown-ESC', () => this.scene.start('StartScreen'));
+        this.input.keyboard.on('keydown-ESC', () => this.scene.start('CityScene'));
         this.input.keyboard.on('keydown-ENTER', () => {
             musicEngine.initialize();
-            this.scene.start('GameScene', { mode: this.selectedMode, soloCharacter: this.soloCharacter });
+            this.scene.start('GameScene', { mode: this.selectedMode, soloCharacter: null });
         });
     }
 }
@@ -6165,10 +6754,10 @@ class AlbumScene extends Phaser.Scene {
             hit.on('pointerout', () => { draw(false); nameText.setScale(1); });
             hit.on('pointerdown', () => {
                 musicEngine.initialize(); musicEngine.playSFX('click');
-                this.scene.start(game.key, {
+                this.time.delayedCall(0, () => this.scene.start(game.key, {
                     parentScene: null, gameSpeed: 1.0, duration: 5000,
                     practiceMode: true, command: game.name.toUpperCase()
-                });
+                }));
             });
         });
 
@@ -6313,7 +6902,7 @@ class ShopScene extends Phaser.Scene {
             else if (item.type === 'fuse') playerData.fuseStyle = item.value;
             playerData.saveData();
             musicEngine.playSFX('click');
-            this.scene.restart({ category: this.currentCategory });
+            this.time.delayedCall(0, () => this.scene.restart({ category: this.currentCategory }));
         } else if (playerData.spendCoins(item.price)) {
             playerData.buyItem(item.id);
             // Gekaufte Optik direkt aktivieren, das erspart einen zweiten Klick
@@ -6323,7 +6912,7 @@ class ShopScene extends Phaser.Scene {
             playerData.saveData();
             musicEngine.playSFX('win');
             Effects.confetti(this, 24);
-            this.scene.restart({ category: this.currentCategory });
+            this.time.delayedCall(0, () => this.scene.restart({ category: this.currentCategory }));
         } else {
             musicEngine.playSFX('lose');
             this.cameras.main.shake(120, 0.008);
@@ -6351,6 +6940,7 @@ class GameScene extends Phaser.Scene {
         this.bossesBeaten = 0;
         this.secondChanceUsed = false;
         this.isPaused = false;
+        this.lastGameKey = null;
         this.lives = this.mode.lives + (Upgrades.hasExtraLife() ? 1 : 0);
         this.maxLives = this.lives + 2;
 
@@ -6389,7 +6979,10 @@ class GameScene extends Phaser.Scene {
             font: 'bold 14px Orbitron', fill: UI.hex(char.color)
         }).setOrigin(1, 0).setDepth(41);
 
-        this.modeText = this.add.text(400, 78, this.mode.icon + ' ' + this.mode.name.toUpperCase(),
+        const modeLabel = this.mode.isStage && this.soloCharacter
+            ? '🏠 ' + CharacterManager.data[this.soloCharacter].stageName.toUpperCase()
+            : this.mode.icon + ' ' + this.mode.name.toUpperCase();
+        this.modeText = this.add.text(400, 78, modeLabel,
             { font: '10px Orbitron', fill: '#4d5468' }).setOrigin(0.5, 0).setDepth(41);
 
         // Punktereihe zeigt, wie viele Spiele noch bis zum Boss fehlen
@@ -6485,7 +7078,10 @@ class GameScene extends Phaser.Scene {
         if (running) return;
         this.isPaused = true;
         musicEngine.pauseMusic();
-        this.scene.launch('PauseScene', { resumeKeys: ['GameScene'] });
+        this.scene.launch('PauseScene', {
+            resumeKeys: ['GameScene'],
+            returnScene: this.mode.isStage ? 'CityScene' : 'StartScreen'
+        });
         this.scene.pause();
     }
 
@@ -6818,6 +7414,8 @@ class GameScene extends Phaser.Scene {
     bossWon() {
         musicEngine.stopMusic();
         this.score += 3; this.gamesPlayed++; this.bossesBeaten++;
+        // Im Stage-Modus beendet der Boss die Stage
+        if (this.mode.isStage) { this.finishStage(); return; }
         this.combo++;
         if (this.combo > this.bestCombo) this.bestCombo = this.combo;
         this.lives = Math.min(this.lives + 1, this.maxLives);
@@ -6894,12 +7492,48 @@ class GameScene extends Phaser.Scene {
         });
     }
 
+    // Stage geschafft: Fortschritt sichern, Abspann zeigen
+    finishStage() {
+        const key = this.soloCharacter;
+        playerData.bossWins++;
+        const bonus = Math.round(120 * Upgrades.coinFactor());
+        this.coinsThisRun += bonus;
+        playerData.addCoins(bonus);
+        if (this.bestCombo > playerData.bestCombo) playerData.bestCombo = this.bestCombo;
+        playerData.updateHighScore(this.score);
+        playerData.updateStageHighScore(key, this.score);
+        const firstClear = playerData.clearStage(key);
+        playerData.saveData();
+
+        const banner = this.add.text(400, 250, 'BOSS BESIEGT!', {
+            font: 'bold 54px Orbitron', fill: '#ffd700', stroke: '#ff6600', strokeThickness: 5
+        }).setOrigin(0.5).setDepth(120);
+        const sub = this.add.text(400, 320, '+' + bonus + ' 💰 Stage-Bonus', {
+            font: 'bold 24px Orbitron', fill: '#00ff88'
+        }).setOrigin(0.5).setDepth(120);
+        musicEngine.playSFX('win');
+        Effects.confetti(this, 70);
+        this.tweens.add({ targets: [banner, sub], scaleX: 1.15, scaleY: 1.15, duration: 300, yoyo: true, repeat: 2 });
+
+        this.time.delayedCall(1900, () => {
+            banner.destroy(); sub.destroy();
+            const outroId = key + '_outro';
+            // Der Abspann läuft beim ersten Sieg, danach direkt zur Auswertung
+            if (firstClear || !playerData.hasSeenStory(outroId)) {
+                this.scene.start('StoryScene', { character: key, type: 'outro', score: this.score });
+            } else {
+                this.scene.start('StageClearScene', { character: key, score: this.score });
+            }
+        });
+    }
+
     gameOver() {
         musicEngine.stopMusic();
         if (this.bestCombo > playerData.bestCombo) playerData.bestCombo = this.bestCombo;
         playerData.updateHighScore(this.score);
         playerData.updateModeHighScore(this.mode.id, this.score);
         playerData.saveData();
+        if (this.mode.isStage) playerData.updateStageHighScore(this.soloCharacter, this.score);
         this.scene.start('GameOverScene', {
             score: this.score,
             mode: this.mode.id,
@@ -6931,9 +7565,16 @@ class GameOverScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#08080f');
         UI.starfield(this, 40, UI.RED);
 
-        const isRecord = this.finalScore > 0 && this.finalScore >= (playerData.modeHighScores[this.mode] || 0);
+        const bestForRun = this.mode === 'stage' && this.soloCharacter
+            ? (playerData.stageHighScores[this.soloCharacter] || 0)
+            : (playerData.modeHighScores[this.mode] || 0);
+        const isRecord = this.finalScore > 0 && this.finalScore >= bestForRun;
 
-        const title = this.add.text(400, 92, 'GAME OVER', { font: 'bold 58px Orbitron', fill: '#ff3355' }).setOrigin(0.5);
+        this.isStage = this.mode === 'stage' && !!this.soloCharacter;
+        const titleLabel = this.isStage ? 'STAGE VERLOREN' : 'GAME OVER';
+        const title = this.add.text(400, 92, titleLabel, {
+            font: this.isStage ? 'bold 46px Orbitron' : 'bold 58px Orbitron', fill: '#ff3355'
+        }).setOrigin(0.5);
         title.setShadow(0, 0, '#ff3355', 18, false, true);
         this.tweens.add({ targets: title, scaleX: 1.03, scaleY: 1.03, duration: 900, yoyo: true, repeat: -1 });
 
@@ -6961,8 +7602,10 @@ class GameOverScene extends Phaser.Scene {
             this.add.text(610, y, String(r[1]), { font: 'bold 13px Orbitron', fill: '#ffffff' }).setOrigin(1, 0.5);
         });
 
-        this.add.text(400, 378, 'Rekord in diesem Modus: ' + (playerData.modeHighScores[this.mode] || 0) +
-            '   •   Gesamt-Highscore: ' + playerData.highScore,
+        const recordLabel = this.isStage
+            ? 'Stage-Rekord: ' + (playerData.stageHighScores[this.soloCharacter] || 0)
+            : 'Rekord in diesem Modus: ' + (playerData.modeHighScores[this.mode] || 0);
+        this.add.text(400, 378, recordLabel + '   •   Gesamt-Highscore: ' + playerData.highScore,
             { font: '12px Orbitron', fill: '#6c7590' }).setOrigin(0.5);
 
         // Neu freigeschaltete Erfolge als kompakte Zeile (statt überlappender Einblendungen)
@@ -6973,9 +7616,11 @@ class GameOverScene extends Phaser.Scene {
             fontSize: 18,
             onClick: () => this.scene.start('GameScene', { mode: this.mode, soloCharacter: this.soloCharacter })
         });
-        UI.button(this, 580, 448, 210, 52, '⚙ MODUS', {
+        UI.button(this, 580, 448, 210, 52, this.isStage ? '🏙 ZUR STADT' : '⚙ MODUS', {
             color: UI.CYAN, fontSize: 18,
-            onClick: () => this.scene.start('ModeSelectScene', { mode: this.mode, soloCharacter: this.soloCharacter })
+            onClick: () => this.isStage
+                ? this.scene.start('CityScene')
+                : this.scene.start('ModeSelectScene', { mode: this.mode })
         });
         UI.button(this, 220, 512, 210, 46, 'ALBUM', {
             color: UI.PURPLE, filled: false, fontSize: 16, onClick: () => this.scene.start('AlbumScene')
@@ -6987,7 +7632,7 @@ class GameOverScene extends Phaser.Scene {
             color: UI.RED, filled: false, fontSize: 14, onClick: () => this.scene.start('StartScreen')
         });
 
-        this.input.keyboard.on('keydown-ESC', () => this.scene.start('StartScreen'));
+        this.input.keyboard.on('keydown-ESC', () => this.scene.start(this.isStage ? 'CityScene' : 'StartScreen'));
         this.input.keyboard.on('keydown-ENTER', () => this.scene.start('GameScene', { mode: this.mode, soloCharacter: this.soloCharacter }));
     }
 
@@ -7024,7 +7669,7 @@ const config = {
     fps: { target: 60, forceSetTimeOut: true },
     render: { antialias: true, roundPixels: false },
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
-    scene: [BootScene, StartScreen, ModeSelectScene, GameScene, GameOverScene, AlbumScene, ShopScene, AchievementsScene, PauseScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, ZobelSneeze, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, SwaggyJump, DudeRun, DudeDodge, DudeJump, DudeSlide, KaeppchenCollect, KaeppchenMaze, KaeppchenDodge, KaeppchenDeliver, KaeppchenPick, EdgarRoll, EdgarBounce, EdgarGoal, EdgarDodge, EdgarPinball, ReactionTest, WhackAMole, CountThem, RhythmTap, AvoidLaser, KeyDuel, ZobelClimb, ZobelDig, SwaggyFlappy, SwaggyHook, DudeSort, DudePush, KaeppchenRedLight, KaeppchenBake, EdgarGolf, EdgarBrick, PickTheNose, SwatTheFly, BlowCandles, StompIt, BossGame, BoxingBoss, SwaggyBoss, KaeppchenBoss, EdgarBoss]
+    scene: [BootScene, StartScreen, CityScene, StoryScene, StageClearScene, ModeSelectScene, GameScene, GameOverScene, AlbumScene, ShopScene, AchievementsScene, PauseScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, ZobelSneeze, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, SwaggyJump, DudeRun, DudeDodge, DudeJump, DudeSlide, KaeppchenCollect, KaeppchenMaze, KaeppchenDodge, KaeppchenDeliver, KaeppchenPick, EdgarRoll, EdgarBounce, EdgarGoal, EdgarDodge, EdgarPinball, ReactionTest, WhackAMole, CountThem, RhythmTap, AvoidLaser, KeyDuel, ZobelClimb, ZobelDig, SwaggyFlappy, SwaggyHook, DudeSort, DudePush, KaeppchenRedLight, KaeppchenBake, EdgarGolf, EdgarBrick, PickTheNose, SwatTheFly, BlowCandles, StompIt, BossGame, BoxingBoss, SwaggyBoss, KaeppchenBoss, EdgarBoss]
 };
 const game = new Phaser.Game(config);
 </script>
