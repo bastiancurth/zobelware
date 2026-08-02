@@ -785,21 +785,31 @@ const Juice = {
         scene.cameras.main.shake(duration, 0.004 + 0.012 * amount, true);
     },
 
-    // Kurzer Zeitstopp beim Aufprall - der Klassiker für Wucht
+    // Kurzer Zeitstopp beim Aufprall - der Klassiker für Wucht.
+    // Wichtig: Das Tempo wird IMMER zurückgesetzt, auch wenn die Szene
+    // inzwischen beendet wurde. Phaser verwendet Szenen-Instanzen wieder -
+    // ein hängengebliebener Zeitfaktor lässt das Spiel beim nächsten Mal
+    // in Zeitlupe laufen und wirkt wie ein Absturz.
     hitstop(scene, ms = 70, scale = 0.06) {
         if (scene.__hitstop) return;
         scene.__hitstop = true;
-        scene.time.timeScale = scale;
-        scene.tweens.timeScale = scale;
-        if (scene.physics && scene.physics.world) scene.physics.world.timeScale = 1 / Math.max(scale, 0.01);
-        // Der Timer selbst läuft verlangsamt, daher über echte Zeit zurückstellen
-        setTimeout(() => {
-            if (!scene.sys || !scene.sys.isActive()) { scene.__hitstop = false; return; }
-            scene.time.timeScale = 1;
-            scene.tweens.timeScale = 1;
-            if (scene.physics && scene.physics.world) scene.physics.world.timeScale = 1;
-            scene.__hitstop = false;
-        }, ms);
+        Juice._setTimeScale(scene, scale);
+        setTimeout(() => Juice.resetTimeScale(scene), ms);
+    },
+
+    _setTimeScale(scene, scale) {
+        if (!scene) return;
+        if (scene.time) scene.time.timeScale = scale;
+        if (scene.tweens) scene.tweens.timeScale = scale;
+    },
+
+    // Setzt das Zeittempo einer Szene bedingungslos zurück
+    resetTimeScale(scene) {
+        if (!scene) return;
+        if (scene.time) scene.time.timeScale = 1;
+        if (scene.tweens) scene.tweens.timeScale = 1;
+        if (scene.physics && scene.physics.world) scene.physics.world.timeScale = 1;
+        scene.__hitstop = false;
     },
 
     // Stauchen und Strecken - lässt starre Sprites lebendig wirken
@@ -836,13 +846,8 @@ const Juice = {
 
     // Zeitlupe für dramatische Momente
     slowmo(scene, ms = 500, scale = 0.35) {
-        scene.time.timeScale = scale;
-        scene.tweens.timeScale = scale;
-        setTimeout(() => {
-            if (!scene.sys || !scene.sys.isActive()) return;
-            scene.time.timeScale = 1;
-            scene.tweens.timeScale = 1;
-        }, ms);
+        Juice._setTimeScale(scene, scale);
+        setTimeout(() => Juice.resetTimeScale(scene), ms);
     }
 };
 
@@ -914,6 +919,7 @@ const FX = {
 
     // Dauerhafter Funkenschweif, der einem Objekt folgt
     trail(scene, target, color = 0x00ff88, scale = 0.5) {
+        if (!Quality.high()) return null;
         const e = scene.add.particles(0, 0, 'fx-glow', {
             follow: target,
             speed: { min: 4, max: 30 },
@@ -929,6 +935,7 @@ const FX = {
 
     // Ruhiger Staub in der Luft - füllt leere Hintergründe
     ambient(scene, color = 0xffffff, count = 26) {
+        if (!Quality.high()) return null;
         const e = scene.add.particles(0, 0, 'fx-glow', {
             x: { min: 0, max: 800 },
             y: { min: 0, max: 600 },
@@ -949,6 +956,7 @@ const FX = {
 
     // Aufsteigende Blasen (Unterwasser-Themen)
     bubbles(scene, count = 22) {
+        if (!Quality.high()) return null;
         return scene.add.particles(0, 620, 'fx-glow', {
             x: { min: 0, max: 800 },
             speedY: { min: -70, max: -22 },
@@ -964,6 +972,7 @@ const FX = {
 
     // Fallende Blätter/Flocken (Wald-Themen)
     leaves(scene, color = 0x8fbf6a, count = 16) {
+        if (!Quality.high()) return null;
         return scene.add.particles(0, -20, 'fx-chip', {
             x: { min: 0, max: 800 },
             speedY: { min: 22, max: 60 },
@@ -1002,17 +1011,26 @@ const Sky = {
         return layers;
     },
 
-    gradient(scene, top, bottom) {
-        const g = scene.add.graphics().setDepth(-1000);
-        const steps = 48;
-        const from = Phaser.Display.Color.ValueToColor(top);
-        const to = Phaser.Display.Color.ValueToColor(bottom);
-        for (let i = 0; i < steps; i++) {
-            const c = Phaser.Display.Color.Interpolate.ColorWithColor(from, to, steps, i);
-            g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
-            g.fillRect(0, (600 / steps) * i, 800, 600 / steps + 1);
+    // Farbverlauf einmal in eine Textur backen und danach als einzelnes Bild
+    // zeichnen. Vorher waren das knapp 50 Rechtecke pro Bild und Ebene.
+    gradientTexture(scene, top, bottom) {
+        const key = 'grad-' + top.toString(16) + '-' + bottom.toString(16);
+        if (!scene.textures.exists(key)) {
+            const tex = scene.textures.createCanvas(key, 8, 600);
+            const ctx = tex.getContext();
+            const g = ctx.createLinearGradient(0, 0, 0, 600);
+            const hex = v => '#' + v.toString(16).padStart(6, '0');
+            g.addColorStop(0, hex(top));
+            g.addColorStop(1, hex(bottom));
+            ctx.fillStyle = g; ctx.fillRect(0, 0, 8, 600);
+            tex.refresh();
         }
-        return g;
+        return key;
+    },
+
+    gradient(scene, top, bottom) {
+        return scene.add.image(400, 300, this.gradientTexture(scene, top, bottom))
+            .setDisplaySize(800, 600).setDepth(-1000);
     },
 
     // Leichtes Rauschen über dem Bild - nimmt Verläufen das Digitale
@@ -1031,6 +1049,7 @@ const Sky = {
 
     ocean(scene, t) {
         FX.bubbles(scene, 24);
+        if (!Quality.high()) return;
         // Lichtstrahlen von der Oberfläche
         for (let i = 0; i < 5; i++) {
             const beam = scene.add.image(90 + i * 165, 240, 'fx-beam')
@@ -1077,6 +1096,7 @@ const Sky = {
             }
         }
         FX.leaves(scene, t.accent, 14);
+        if (!Quality.high()) return;
         // Sonnenstrahlen
         for (let i = 0; i < 3; i++) {
             const beam = scene.add.image(160 + i * 240, 200, 'fx-beam')
@@ -1099,6 +1119,7 @@ const Sky = {
             x += w * 0.8;
         }
         FX.ambient(scene, t.accent, 18);
+        if (!Quality.high()) return;
         // Blinkende Warnlichter
         for (let i = 0; i < 4; i++) {
             const l = scene.add.image(110 + i * 200, 430 + Math.random() * 60, 'fx-glow')
@@ -1110,6 +1131,7 @@ const Sky = {
 
     arena(scene, t) {
         this.grid(scene, t);
+        if (!Quality.high()) return;
         // Scheinwerferkegel von oben
         for (let i = 0; i < 4; i++) {
             const beam = scene.add.image(120 + i * 190, 120, 'fx-beam')
@@ -1717,6 +1739,8 @@ class BaseMicrogame extends Phaser.Scene {
 
     create() {
         this.hasEnded = false;
+        // Wiederverwendete Szenen-Instanz: Zeittempo sicherheitshalber normalisieren
+        Juice.resetTimeScale(this);
         Art.build(this);
         PostFX.apply(this, { bloomStrength: 0.42, vignetteStrength: 0.34 });
 
@@ -1774,8 +1798,8 @@ class BaseMicrogame extends Phaser.Scene {
         this.sparkGlow = this.add.image(100, 575, 'fx-glow')
             .setScale(0.42).setTint(0xffaa33).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.6).setDepth(2002);
         this.tweens.add({ targets: this.sparkGlow, scale: 0.62, alpha: 0.25, duration: 300, yoyo: true, repeat: -1 });
-        // Funkenflug an der Brennstelle
-        this.sparkTrail = this.add.particles(0, 0, 'fx-spark', {
+        // Funkenflug an der Brennstelle (nur bei hoher Qualität)
+        this.sparkTrail = !Quality.high() ? null : this.add.particles(0, 0, 'fx-spark', {
             follow: this.spark,
             speed: { min: 18, max: 70 },
             angle: { min: 200, max: 340 },
@@ -1783,7 +1807,8 @@ class BaseMicrogame extends Phaser.Scene {
             lifespan: 340, frequency: 34,
             tint: [0xffd93d, 0xff8833],
             blendMode: 'ADD'
-        }).setDepth(2002);
+        });
+        if (this.sparkTrail) this.sparkTrail.setDepth(2002);
 
         this.warnedLowTime = false;
     }
@@ -2044,16 +2069,12 @@ class BaseMicrogame extends Phaser.Scene {
         const themeKey = this.themeKey || CharacterManager.currentCharacter;
         Sky.build(this, themeKey);
         // Die vom Minispiel gewünschte Farbe als Tönung darüberlegen,
-        // damit jedes Spiel seine eigene Stimmung behält.
-        const tint = this.add.graphics().setDepth(-980);
-        const from = Phaser.Display.Color.ValueToColor(topColor);
-        const to = Phaser.Display.Color.ValueToColor(bottomColor);
-        for (let i = 0; i < 40; i++) {
-            const c = Phaser.Display.Color.Interpolate.ColorWithColor(from, to, 40, i);
-            tint.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 0.55);
-            tint.fillRect(0, 15 * i, 800, 16);
-        }
-        return tint;
+        // damit jedes Spiel seine eigene Stimmung behält (als Textur, nicht als
+        // Dutzende Rechtecke - das spart pro Bild spürbar Rechenzeit).
+        // Über der gesamten Theme-Kulisse liegen (Bäume, Strahlen, Gitter enden
+        // bei -890), sonst schneiden die Silhouetten durch helle Spielflächen.
+        return this.add.image(400, 300, Sky.gradientTexture(this, topColor, bottomColor))
+            .setDisplaySize(800, 600).setAlpha(0.6).setDepth(-880);
     }
 
     spawnAwayFromCursor(minDist = 150) {
@@ -6444,13 +6465,27 @@ class StartScreen extends Phaser.Scene {
         PostFX.apply(this, { bloomStrength: 0.45 });
         FX.ambient(this, 0x00ff88, 22);
 
+        // Ohne Server blockiert der Browser das Laden der PNGs (file:// gilt als
+        // fremde Herkunft). Das ist die häufigste Stolperfalle - daher hier
+        // ein Hinweis, der auch gleich sagt, was zu tun ist.
         const missing = !this.textures.exists('zobel') || !this.textures.exists('swaggy');
         if (missing) {
-            this.add.rectangle(400, 574, 780, 42, 0x330000, 0.9);
-            this.add.text(400, 574, window.location.protocol === 'file:'
-                ? 'Bilder nicht geladen - bitte über einen lokalen Server öffnen'
-                : 'Bilder nicht gefunden - liegen die PNGs neben der HTML-Datei?',
-                { font: '11px Orbitron', fill: '#ff8888' }).setOrigin(0.5);
+            const local = window.location.protocol === 'file:';
+            this.add.rectangle(400, 560, 786, 74, 0x2a0000, 0.92);
+            this.add.rectangle(400, 560, 786, 74).setStrokeStyle(2, 0xff5c7a, 0.8);
+            this.add.text(400, 538, local ? 'BILDER BLOCKIERT - DIREKT GEÖFFNETE DATEI' : 'BILDER NICHT GEFUNDEN',
+                { font: 'bold 12px Orbitron', fill: '#ff8888' }).setOrigin(0.5);
+            if (local) {
+                this.add.text(400, 558, 'Browser dürfen aus einer per Doppelklick geöffneten Datei keine Bilder laden.',
+                    { font: '10px Orbitron', fill: '#ffbbbb' }).setOrigin(0.5);
+                this.add.text(400, 576, 'Im Ordner starten:  python3 -m http.server 8000   →   http://localhost:8000',
+                    { font: '10px Orbitron', fill: '#88ff88' }).setOrigin(0.5);
+            } else {
+                this.add.text(400, 562, 'Liegen Zobel.png, swaggy.png, dude.png, kaeppchen.png, edgar.png,',
+                    { font: '10px Orbitron', fill: '#ffbbbb' }).setOrigin(0.5);
+                this.add.text(400, 578, 'characters.png und explosion.png im selben Ordner wie diese Datei?',
+                    { font: '10px Orbitron', fill: '#ffbbbb' }).setOrigin(0.5);
+            }
         }
 
         // Titel mit Leuchtschrift
