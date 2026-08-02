@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#05060f">
+    <meta name="theme-color" content="#211710">
     <title>ZobelWare NEO</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,56 +11,270 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; overflow: hidden; background: #04040a; }
+        html { width: 100%; height: 100%; overflow: hidden; background: #0a0705; }
+        /* body ohne eigenen Hintergrund, sonst verdeckt er das Zimmer dahinter */
+        body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
         body {
             display: flex; justify-content: center; align-items: center;
             font-family: 'Orbitron', sans-serif;
             touch-action: none; -webkit-tap-highlight-color: transparent;
+            /* Bildschirmbreite steuert die Groesse des ganzen Fernsehers */
+            --screen-w: min(84vw, 88vh, 1080px);
+            --bez: calc(var(--screen-w) * 0.045);
+            --wood: #6b3f22;
         }
-        /* Langsam wanderndes Farbenspiel hinter dem Spielfeld */
-        body::after {
-            content: ''; position: fixed; inset: -25%;
+
+        /* ==================================================================
+           DAS ZIMMER
+           Tapete, Fussleiste, Dielenboden, Teppich und warmes Lampenlicht.
+           ================================================================== */
+        #room { position: fixed; inset: 0; z-index: -3; overflow: hidden; }
+        #room .wall {
+            position: absolute; inset: 0 0 26% 0;
             background:
-                radial-gradient(circle at 18% 22%, rgba(0,255,136,0.13), transparent 42%),
-                radial-gradient(circle at 82% 28%, rgba(0,212,255,0.12), transparent 42%),
-                radial-gradient(circle at 50% 88%, rgba(176,107,255,0.15), transparent 48%),
-                linear-gradient(140deg, #070818 0%, #150a2c 48%, #061622 100%);
-            animation: aurora 26s ease-in-out infinite alternate;
-            z-index: -2;
+                repeating-linear-gradient(90deg,
+                    rgba(255,255,255,0.030) 0px, rgba(255,255,255,0.030) 26px,
+                    transparent 26px, transparent 62px),
+                linear-gradient(180deg, #3a2a1c 0%, #2b1e14 55%, #211710 100%);
         }
-        @keyframes aurora {
-            0%   { transform: translate3d(0,0,0) scale(1) rotate(0deg); }
-            100% { transform: translate3d(2.5%,-2.5%,0) scale(1.08) rotate(1.5deg); }
+        /* Warmes Licht einer Stehlampe von links oben */
+        #room .lamp {
+            position: absolute; inset: 0;
+            background:
+                radial-gradient(circle at 12% 8%, rgba(255,196,110,0.28), transparent 46%),
+                radial-gradient(circle at 92% 14%, rgba(255,150,90,0.10), transparent 40%);
         }
-        /* Feine Scanlines und Randabdunklung - Arcade-Gefühl */
+        #room .skirting {
+            position: absolute; left: 0; right: 0; top: 74%; height: 2.4%;
+            background: linear-gradient(180deg, #4a3220, #2c1c11);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+        }
+        #room .floor {
+            position: absolute; left: -20%; right: -20%; top: 76.4%; bottom: 0;
+            background:
+                repeating-linear-gradient(90deg,
+                    rgba(0,0,0,0.22) 0px, rgba(0,0,0,0.22) 2px,
+                    transparent 2px, transparent 84px),
+                repeating-linear-gradient(0deg,
+                    rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px,
+                    transparent 1px, transparent 34px),
+                linear-gradient(180deg, #5a3620 0%, #34200f 100%);
+            transform: perspective(520px) rotateX(46deg);
+            transform-origin: top center;
+        }
+        #room .rug {
+            position: absolute; left: 50%; top: 84%; width: 78vw; height: 30vh;
+            transform: translateX(-50%);
+            border-radius: 50%;
+            background: radial-gradient(ellipse at center, #7a2f3c 0%, #5c2230 60%, transparent 72%);
+            opacity: 0.72;
+        }
+        /* Deko an der Wand - auf schmalen Bildschirmen ausgeblendet */
+        #room .poster {
+            position: absolute; left: 3.4vw; top: 13vh; width: 12vw; height: 16vh;
+            transform: rotate(-3deg);
+            background: linear-gradient(160deg, #d9b23f, #b3521f);
+            border: 0.7vh solid #f2e2bd;
+            box-shadow: 0 1.4vh 3vh rgba(0,0,0,0.55);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 0.6vh; color: #2a140a; text-align: center; padding: 0.6vh;
+        }
+        #room .poster b { font-size: clamp(9px, 1.5vh, 17px); letter-spacing: .16em; }
+        #room .poster span { font-size: clamp(7px, 1vh, 11px); letter-spacing: .1em; opacity: .8; }
+        #room .shelf {
+            position: absolute; right: 3vw; top: 20vh; width: 13vw; height: 1.4vh;
+            background: linear-gradient(180deg, #7d4c2a, #40230f);
+            box-shadow: 0 1vh 2vh rgba(0,0,0,0.5);
+        }
+        #room .shelf .stuff {
+            position: absolute; left: 0; right: 0; bottom: 100%;
+            display: flex; justify-content: space-around; align-items: flex-end;
+            font-size: clamp(12px, 2.4vh, 28px); filter: saturate(.85) brightness(.85);
+        }
+        #room .plant {
+            position: absolute; right: 2vw; bottom: 4vh;
+            font-size: clamp(28px, 9vh, 96px);
+            filter: brightness(.55) saturate(.7);
+            text-shadow: 0 0 3vh rgba(0,0,0,0.6);
+        }
+        /* Zimmer-Vignette */
         body::before {
-            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 60;
-            background:
-                repeating-linear-gradient(0deg, rgba(0,0,0,0.14), rgba(0,0,0,0.14) 1px, transparent 1px, transparent 3px),
-                radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.62) 100%);
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 40;
+            background: radial-gradient(ellipse at 50% 48%, transparent 56%, rgba(0,0,0,0.55) 100%);
         }
-        #game-shell {
+
+        /* ==================================================================
+           DER FERNSEHER
+           ================================================================== */
+        #tv {
+            position: relative; z-index: 5;
+            display: flex; flex-direction: column; align-items: center;
+            filter: drop-shadow(0 calc(var(--screen-w) * 0.03) calc(var(--screen-w) * 0.05) rgba(0,0,0,0.75));
+        }
+        /* Hasenohren-Antenne */
+        #tv .antenna {
+            position: relative; width: calc(var(--screen-w) * 0.42);
+            height: calc(var(--screen-w) * 0.11);
+        }
+        #tv .antenna i {
+            position: absolute; bottom: 0; left: 50%; width: 3px; height: 100%;
+            background: linear-gradient(180deg, #cfd6de, #6d7681);
+            border-radius: 3px; transform-origin: bottom center;
+        }
+        #tv .antenna i:first-child { transform: rotate(-34deg); }
+        #tv .antenna i:last-child  { transform: rotate(30deg); }
+        #tv .antenna b {
+            position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%);
+            width: calc(var(--screen-w) * 0.09); height: calc(var(--screen-w) * 0.02);
+            background: linear-gradient(180deg, #4d4237, #2a231b);
+            border-radius: 3px 3px 0 0;
+        }
+        #tv .cabinet {
             position: relative;
-            width: min(100vw, calc(100vh * 4 / 3));
-            max-width: 1180px;
-            aspect-ratio: 4 / 3;
-            display: flex; align-items: center; justify-content: center;
+            padding: var(--bez);
+            padding-bottom: calc(var(--bez) * 0.6);
+            border-radius: calc(var(--bez) * 1.5);
+            background:
+                linear-gradient(160deg, #c8b190 0%, #a68d68 22%, #8a7150 55%, #6d5739 100%);
+            box-shadow:
+                inset 0 2px 0 rgba(255,255,255,0.35),
+                inset 0 -3px 8px rgba(0,0,0,0.45),
+                0 0 0 2px rgba(40,28,16,0.9);
         }
-        /* Leuchtender Rahmen wie bei einem Arcade-Automaten */
-        #game-shell::before {
-            content: ''; position: absolute; inset: -14px; border-radius: 22px;
-            background: linear-gradient(135deg, #00ff88, #00d4ff 35%, #b06bff 70%, #00ff88);
-            filter: blur(16px); opacity: 0.35; z-index: -1;
-            animation: bezel 8s ease-in-out infinite alternate;
+        /* Feine Kunststoff-Maserung */
+        #tv .cabinet::before {
+            content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+            background: repeating-linear-gradient(115deg,
+                rgba(255,255,255,0.035) 0 2px, transparent 2px 5px);
+            mix-blend-mode: overlay;
         }
-        @keyframes bezel { 0% { opacity: 0.22; } 100% { opacity: 0.45; } }
-        canvas {
-            display: block;
-            border: 3px solid rgba(0,255,136,0.75);
-            border-radius: 12px;
-            box-shadow: 0 0 30px rgba(0,255,136,0.35), inset 0 0 60px rgba(0,0,0,0.6);
+        #tv .screen-wrap {
+            position: relative;
+            width: var(--screen-w); aspect-ratio: 4 / 3;
+            border-radius: 5% / 6.5%;
+            overflow: hidden;
             background: #05060f;
+            box-shadow:
+                0 0 0 calc(var(--bez) * 0.22) #2a2117,
+                inset 0 0 calc(var(--bez) * 1.6) rgba(0,0,0,0.85);
         }
+        #game-shell { position: absolute; inset: 0; }
+        canvas { display: block; width: 100% !important; height: 100% !important; background: #05060f; }
+
+        /* Die Glasscheibe: Scanlines, Wölbung, Spiegelung, Bildlauf */
+        #tv .glass {
+            position: absolute; inset: 0; pointer-events: none; z-index: 20;
+            border-radius: inherit;
+            background:
+                repeating-linear-gradient(0deg, rgba(0,0,0,0.13) 0 1px, transparent 1px 3px),
+                repeating-linear-gradient(90deg, rgba(255,0,80,0.028) 0 1px, rgba(0,255,120,0.028) 1px 2px, rgba(60,120,255,0.028) 2px 3px),
+                radial-gradient(ellipse at 50% 46%, transparent 56%, rgba(0,0,0,0.55) 100%);
+        }
+        /* Lichtreflex oben links auf der Röhre */
+        #tv .glass::before {
+            content: ''; position: absolute; left: 4%; top: 3%; width: 46%; height: 34%;
+            background: linear-gradient(150deg, rgba(255,255,255,0.07), rgba(255,255,255,0));
+            border-radius: 50% 50% 60% 40%;
+            transform: rotate(-8deg);
+        }
+        /* Langsam durchlaufender Helligkeitsstreifen */
+        #tv .glass::after {
+            content: ''; position: absolute; left: 0; right: 0; height: 26%;
+            background: linear-gradient(180deg, transparent, rgba(255,255,255,0.032), transparent);
+            animation: roll 7.5s linear infinite;
+            will-change: transform;
+        }
+        @keyframes roll { from { transform: translateY(-30%); } to { transform: translateY(420%); } }
+        body[data-crt="off"] #tv .glass { display: none; }
+
+        /* Kanalanzeige oben rechts wie beim Umschalten */
+        #tv .channel {
+            position: absolute; right: 4%; top: 5%; z-index: 25; pointer-events: none;
+            font-size: calc(var(--screen-w) * 0.032); font-weight: 900; letter-spacing: .18em;
+            color: #9dffcb; text-shadow: 0 0 10px rgba(0,255,140,0.8);
+            opacity: 0; transition: opacity .5s ease;
+        }
+        #tv .channel.show { opacity: 0.9; }
+
+        /* Bedienfeld unter dem Bildschirm */
+        #tv .panel {
+            display: flex; align-items: center; gap: calc(var(--bez) * 0.55);
+            width: var(--screen-w); height: calc(var(--screen-w) * 0.085);
+            margin-top: calc(var(--bez) * 0.55);
+            padding: 0 calc(var(--bez) * 0.2);
+        }
+        #tv .brand {
+            font-size: calc(var(--screen-w) * 0.024); font-weight: 900; letter-spacing: .26em;
+            color: #3e2d18; text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+            white-space: nowrap;
+        }
+        #tv .grille {
+            flex: 1; height: 62%; border-radius: calc(var(--bez) * 0.3);
+            background:
+                repeating-linear-gradient(90deg,
+                    rgba(0,0,0,0.42) 0 3px, rgba(255,255,255,0.10) 3px 7px);
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.55);
+        }
+        #tv .knob {
+            width: calc(var(--screen-w) * 0.062); height: calc(var(--screen-w) * 0.062);
+            border-radius: 50%; flex: none; cursor: pointer; position: relative;
+            background: radial-gradient(circle at 34% 30%, #6f6152, #2e261d 70%);
+            box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 2px 5px rgba(0,0,0,0.6);
+            transition: transform .2s ease;
+        }
+        #tv .knob::after {
+            content: ''; position: absolute; left: 50%; top: 12%;
+            width: 2px; height: 34%; margin-left: -1px; border-radius: 2px;
+            background: #e8dcc4;
+        }
+        #tv .knob:hover { transform: scale(1.08); }
+        #tv .knob.turned { transform: rotate(128deg); }
+        #tv .knob.turned:hover { transform: rotate(128deg) scale(1.08); }
+        #tv .led {
+            width: calc(var(--screen-w) * 0.016); height: calc(var(--screen-w) * 0.016);
+            border-radius: 50%; flex: none;
+            background: #ff5b47; box-shadow: 0 0 calc(var(--screen-w) * 0.02) #ff5b47;
+            animation: pulse 2.6s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+        /* Standfuss */
+        #tv .stand {
+            width: calc(var(--screen-w) * 0.34); height: calc(var(--screen-w) * 0.035);
+            background: linear-gradient(180deg, #4a3b28, #241a10);
+            border-radius: 0 0 calc(var(--bez) * 0.6) calc(var(--bez) * 0.6);
+            box-shadow: 0 calc(var(--screen-w) * 0.012) calc(var(--screen-w) * 0.02) rgba(0,0,0,0.6);
+        }
+
+        /* Erzähltext im Zimmer */
+        #room-text {
+            position: fixed; left: 50%; bottom: 1.6vh; transform: translateX(-50%);
+            z-index: 45; pointer-events: none; text-align: center; width: 92vw;
+            font-size: clamp(9px, 1.45vh, 15px); letter-spacing: .14em;
+            color: rgba(255,224,180,0.62);
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+            transition: opacity .8s ease; opacity: 1;
+        }
+        #room-text.fade { opacity: 0; }
+
+        /* Bildschirm-Modus: Zimmer ausblenden, nur noch spielen */
+        body[data-room="off"] #room .poster,
+        body[data-room="off"] #room .shelf,
+        body[data-room="off"] #room .plant,
+        body[data-room="off"] #room .rug,
+        body[data-room="off"] #room-text { display: none; }
+        body[data-room="off"] #room .wall { inset: 0; background: #0b0a12; }
+        body[data-room="off"] #room .floor,
+        body[data-room="off"] #room .skirting,
+        body[data-room="off"] #room .lamp { display: none; }
+        body[data-room="off"] #tv .antenna,
+        body[data-room="off"] #tv .stand { display: none; }
+        body[data-room="off"] { --screen-w: min(96vw, 98vh, 1400px); --bez: calc(var(--screen-w) * 0.016); }
+        body[data-room="off"] #tv .cabinet { background: #14121a; box-shadow: 0 0 0 2px #23202e; }
+        /* Die Knoepfe bleiben erreichbar, damit man zurueckschalten kann */
+        body[data-room="off"] #tv .brand,
+        body[data-room="off"] #tv .grille { visibility: hidden; }
+        body[data-room="off"] #tv .panel { height: calc(var(--screen-w) * 0.05); }
+
         #boot-overlay {
             position: fixed; inset: 0; display: flex; flex-direction: column;
             align-items: center; justify-content: center; gap: 20px;
@@ -75,14 +289,125 @@
         }
         #boot-overlay .sub { font-size: 11px; color: #00d4ff; letter-spacing: .5em; }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Schmale Fenster: Deko weg, Rahmen duenner */
+        @media (max-width: 820px), (max-height: 560px) {
+            #room .poster, #room .shelf, #room .plant { display: none; }
+            body { --screen-w: min(96vw, 92vh); --bez: calc(var(--screen-w) * 0.028); }
+            #tv .antenna, #tv .stand { display: none; }
+            #room-text { display: none; }
+        }
         @media (prefers-reduced-motion: reduce) {
-            body::after, #game-shell::before, #boot-overlay .ring { animation: none; }
+            #tv .glass::after, #tv .led, #boot-overlay .ring { animation: none; }
         }
     </style>
 </head>
-<body>
+<body data-crt="on" data-room="on">
 <div id="boot-overlay"><div class="ring"></div><div>ZOBELWARE</div><div class="sub">NEO</div></div>
-<div id="game-shell"></div>
+
+<div id="room">
+    <div class="wall"></div>
+    <div class="lamp"></div>
+    <div class="poster"><b>ZOBEL</b><b>WARE</b><span>JETZT NEU</span></div>
+    <div class="shelf"><div class="stuff">🏆 📼 🥤</div></div>
+    <div class="skirting"></div>
+    <div class="floor"></div>
+    <div class="rug"></div>
+    <div class="plant">🪴</div>
+</div>
+
+<div id="tv">
+    <div class="antenna"><i></i><b></b><i></i></div>
+    <div class="cabinet">
+        <div class="screen-wrap">
+            <div id="game-shell"></div>
+            <div class="channel" id="tv-channel">CH 03</div>
+            <div class="glass"></div>
+        </div>
+        <div class="panel">
+            <div class="brand">ZOBELTRON</div>
+            <div class="grille"></div>
+            <div class="knob" id="knob-crt" title="Röhren-Optik an/aus"></div>
+            <div class="knob" id="knob-room" title="Zimmer an/aus"></div>
+            <div class="led"></div>
+        </div>
+    </div>
+    <div class="stand"></div>
+</div>
+
+<div id="room-text">Samstagmorgen. Der Fernseher läuft schon seit Stunden.</div>
+
+<script>
+// ======================================================================
+// WOHNZIMMER-RAHMEN
+// Zwei Drehknoepfe am Fernseher, eine Kanalanzeige und wechselnder
+// Erzaehltext im Zimmer. Alles rein kosmetisch, das Spiel merkt nichts.
+// ======================================================================
+(function () {
+    const body = document.body;
+    const knobCrt = document.getElementById('knob-crt');
+    const knobRoom = document.getElementById('knob-room');
+    const channel = document.getElementById('tv-channel');
+    const roomText = document.getElementById('room-text');
+
+    const load = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+    const save = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+
+    function apply(attr, value, knob) {
+        body.setAttribute(attr, value);
+        knob.classList.toggle('turned', value === 'off');
+    }
+    apply('data-crt', load('zw_crt', 'on'), knobCrt);
+    apply('data-room', load('zw_room', 'on'), knobRoom);
+
+    function flashChannel(text) {
+        channel.textContent = text;
+        channel.classList.add('show');
+        clearTimeout(flashChannel.t);
+        flashChannel.t = setTimeout(() => channel.classList.remove('show'), 1800);
+    }
+
+    knobCrt.addEventListener('click', () => {
+        const next = body.getAttribute('data-crt') === 'on' ? 'off' : 'on';
+        apply('data-crt', next, knobCrt);
+        save('zw_crt', next);
+        flashChannel(next === 'on' ? 'RÖHRE AN' : 'RÖHRE AUS');
+    });
+    knobRoom.addEventListener('click', () => {
+        const next = body.getAttribute('data-room') === 'on' ? 'off' : 'on';
+        apply('data-room', next, knobRoom);
+        save('zw_room', next);
+        flashChannel(next === 'on' ? 'ZIMMER AN' : 'VOLLBILD');
+    });
+
+    setTimeout(() => flashChannel('CH 03'), 900);
+
+    const LINES = [
+        'Samstagmorgen. Der Fernseher läuft schon seit Stunden.',
+        'Draußen regnet es. Drinnen läuft ZobelWare.',
+        'Die Antenne wackelt – aber das Bild bleibt.',
+        'Kanal 3. Ein anderer war nie nötig.',
+        'Irgendwo im Haus ruft jemand nach dem Abendessen.',
+        'Der Teppich ist warm, die Röhre brummt leise.',
+        'Auf dem Regal steht noch der Pokal von damals.',
+        'Nur noch ein Spiel. Wirklich nur noch eins.',
+        'Die Limo ist warm geworden. Egal.',
+        'Draußen wird es dunkel. Der Bildschirm bleibt hell.',
+        'Der Zobel im Fernseher sieht müde aus. Du auch.',
+        'Später räumst du auf. Später.'
+    ];
+    let li = 0;
+    setInterval(() => {
+        if (body.getAttribute('data-room') === 'off') return;
+        roomText.classList.add('fade');
+        setTimeout(() => {
+            li = (li + 1) % LINES.length;
+            roomText.textContent = LINES[li];
+            roomText.classList.remove('fade');
+        }, 800);
+    }, 11000);
+})();
+</script>
 <script>
 
 class MusicEngine {
@@ -95,16 +420,19 @@ class MusicEngine {
         this.noteFreq = {'C2':65.41,'D2':73.42,'E2':82.41,'F2':87.31,'G2':98,'A2':110,'B2':123.47,'C3':130.81,'D3':146.83,'E3':164.81,'F3':174.61,'G3':196,'A3':220,'B3':246.94,'C4':261.63,'D4':293.66,'E4':329.63,'F4':349.23,'G4':392,'A4':440,'B4':493.88,'C5':523.25,'D5':587.33,'E5':659.25,'F5':698.46,'G5':783.99,'A5':880,'B5':987.77,'C6':1046.5,'D6':1174.66,'E6':1318.51};
         // Verschiedene Musik-Styles für Microgames
         this.musicStyles = {
-            main: { melody: ['C5','E5','G5','C6','B5','G5','E5','C5'], bass: ['C3','G3','C3','G3'], tempo: 1.0, type: 'square' },
-            action: { melody: ['E5','E5','E5','C5','E5','G5','G4'], bass: ['C3','C3','G2','G2'], tempo: 1.2, type: 'square' },
-            puzzle: { melody: ['G4','A4','B4','C5','D5','E5','D5','C5'], bass: ['C3','E3','G3','E3'], tempo: 0.8, type: 'sine' },
-            tense: { melody: ['E4','E4','F4','G4','G4','F4','E4','D4'], bass: ['A2','A2','A2','E2'], tempo: 1.0, type: 'sawtooth' },
-            happy: { melody: ['C5','D5','E5','G5','E5','D5','C5','G4'], bass: ['C3','G3','E3','G3'], tempo: 1.1, type: 'square' },
-            rush: { melody: ['C5','C5','G5','G5','A5','A5','G5'], bass: ['C3','C3','F3','G3'], tempo: 1.4, type: 'square' },
-            calm: { melody: ['E4','G4','B4','E5','D5','B4','G4','E4'], bass: ['E3','B2','E3','B2'], tempo: 0.7, type: 'sine' },
-            boss: { melody: ['C4','D#4','G4','C5','D#5','G5','D#5','C5'], bass: ['C2','C2','G2','C2'], tempo: 1.3, type: 'sawtooth' }
+            main:   { melody:['C5','E5','G5','C6','B5','G5','E5','C5'], bass:['C3','C3','G2','G2'], arp:['C4','E4','G4','E4'], tempo:1.0, type:'square', duty:0.5 },
+            action: { melody:['E5','E5','E5','C5','E5','G5','G4','G4'], bass:['C3','C3','G2','A2'], arp:['C4','G4','C5','G4'], tempo:1.2, type:'square', duty:0.25 },
+            puzzle: { melody:['G4','A4','B4','C5','D5','E5','D5','C5'], bass:['C3','E3','G3','E3'], arp:['C4','E4','G4','B4'], tempo:0.85, type:'triangle', duty:0.5 },
+            tense:  { melody:['E4','E4','F4','G4','G4','F4','E4','D4'], bass:['A2','A2','A2','G2'], arp:['A3','C4','E4','C4'], tempo:1.05, type:'sawtooth', duty:0.5 },
+            happy:  { melody:['C5','D5','E5','G5','E5','D5','C5','G4'], bass:['C3','G3','E3','G3'], arp:['C4','E4','G4','C5'], tempo:1.1, type:'square', duty:0.5 },
+            rush:   { melody:['C5','C5','G5','G5','A5','A5','G5','E5'], bass:['C3','C3','F3','G3'], arp:['C4','F4','A4','F4'], tempo:1.45, type:'square', duty:0.25 },
+            calm:   { melody:['E4','G4','B4','E5','D5','B4','G4','E4'], bass:['E3','B2','E3','B2'], arp:['E4','G4','B4','G4'], tempo:0.75, type:'triangle', duty:0.5 },
+            boss:   { melody:['C4','D#4','G4','C5','D#5','G5','D#5','C5'], bass:['C2','C2','G2','C2'], arp:['C4','D#4','G4','A#4'], tempo:1.3, type:'sawtooth', duty:0.5 }
         };
+        // Kanaele mit eigener Lautstaerke, wie bei einem Soundchip
+        this.mix = { kick: 0.75, snare: 0.32, hat: 0.10, bass: 0.24, lead: 0.20, arp: 0.11 };
     }
+
     initialize() {
         if (this.initialized) return;
         try {
@@ -280,60 +608,104 @@ class MusicEngine {
     }
     playStyleBeat(time, beat, style) {
         const ctx = this.audioContext, beatInBar = beat % 16;
-        // Kick drum
-        if (beatInBar === 0 || beatInBar === 8) {
+        const m = this.mix;
+
+        // Kick: kurzer, tiefer Schlag
+        if (beatInBar === 0 || beatInBar === 6 || beatInBar === 8) {
             const osc = ctx.createOscillator(), g = ctx.createGain();
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(150, time);
-            osc.frequency.exponentialRampToValueAtTime(40, time + 0.1);
-            g.gain.setValueAtTime(0.7, time);
-            g.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+            osc.frequency.setValueAtTime(165, time);
+            osc.frequency.exponentialRampToValueAtTime(38, time + 0.09);
+            g.gain.setValueAtTime(m.kick, time);
+            g.gain.exponentialRampToValueAtTime(0.01, time + 0.13);
             osc.connect(g); g.connect(this.musicGain);
-            osc.start(time); osc.stop(time + 0.15);
+            osc.start(time); osc.stop(time + 0.13);
         }
-        // Snare
+
+        // Snare: gefiltertes Rauschen auf den Zaehlzeiten 2 und 4
         if (beatInBar === 4 || beatInBar === 12) {
-            const bufSize = ctx.sampleRate * 0.1;
+            const bufSize = ctx.sampleRate * 0.09;
             const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
             const data = buf.getChannelData(0);
-            for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+            for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
             const noise = ctx.createBufferSource(); noise.buffer = buf;
             const g = ctx.createGain(), filter = ctx.createBiquadFilter();
-            filter.type = 'highpass'; filter.frequency.value = 1000;
-            g.gain.setValueAtTime(0.35, time);
-            g.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+            filter.type = 'bandpass'; filter.frequency.value = 1900; filter.Q.value = 0.8;
+            g.gain.setValueAtTime(m.snare, time);
+            g.gain.exponentialRampToValueAtTime(0.01, time + 0.09);
             noise.connect(filter); filter.connect(g); g.connect(this.musicGain);
-            noise.start(time); noise.stop(time + 0.1);
+            noise.start(time); noise.stop(time + 0.09);
         }
-        // Hi-hat
+
+        // Hi-Hat auf jeder Achtel, jede zweite offener
         if (beatInBar % 2 === 0) {
-            const bufSize = ctx.sampleRate * 0.03;
+            const open = beatInBar % 8 === 6;
+            const len = open ? 0.09 : 0.025;
+            const bufSize = ctx.sampleRate * len;
             const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
             const data = buf.getChannelData(0);
             for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
             const noise = ctx.createBufferSource(); noise.buffer = buf;
             const g = ctx.createGain(), filter = ctx.createBiquadFilter();
-            filter.type = 'highpass'; filter.frequency.value = 7000;
-            g.gain.setValueAtTime(0.12, time);
-            g.gain.exponentialRampToValueAtTime(0.01, time + 0.03);
+            filter.type = 'highpass'; filter.frequency.value = 8200;
+            g.gain.setValueAtTime(m.hat * (open ? 1.5 : 1), time);
+            g.gain.exponentialRampToValueAtTime(0.001, time + len);
             noise.connect(filter); filter.connect(g); g.connect(this.musicGain);
-            noise.start(time); noise.stop(time + 0.03);
+            noise.start(time); noise.stop(time + len);
         }
-        // Bass
-        if (beatInBar % 4 === 0) {
+
+        const beatLen = 60.0 / this.currentBPM;
+
+        // Bass: huepfende Achtel statt liegender Toene
+        if (beatInBar % 2 === 0) {
             const bassIdx = Math.floor(beat / 4) % style.bass.length;
-            const bassNote = style.bass[bassIdx];
-            const freq = this.noteFreq[bassNote];
-            if (freq) this.playNote(freq, (60.0 / this.currentBPM) * 0.8, 'sawtooth', 0.22, time);
+            const freq = this.noteFreq[style.bass[bassIdx]];
+            if (freq) {
+                const octave = (beatInBar % 4 === 2) ? 2 : 1;   // leichtes Auf und Ab
+                this.playNote(freq * octave, beatLen * 0.22, 'square', m.bass, time);
+            }
         }
-        // Melody
+
+        // Arpeggio: schnelle Sechzehntel, gibt den typischen Chip-Klang
+        if (style.arp) {
+            const arpIdx = beat % style.arp.length;
+            const freq = this.noteFreq[style.arp[arpIdx]];
+            if (freq) this.playNote(freq, beatLen * 0.12, 'square', m.arp, time);
+        }
+
+        // Melodie
         if (beatInBar % 2 === 0) {
             const melIdx = Math.floor(beat / 2) % style.melody.length;
-            const melNote = style.melody[melIdx];
-            const freq = this.noteFreq[melNote];
-            if (freq) this.playNote(freq, (60.0 / this.currentBPM) * 0.5, style.type, 0.18, time);
+            const freq = this.noteFreq[style.melody[melIdx]];
+            if (freq) {
+                this.playNote(freq, beatLen * 0.42, style.type, m.lead, time);
+                // Zweite Stimme eine Oktave hoeher, ganz leise - macht es voller
+                this.playNote(freq * 2, beatLen * 0.30, 'square', m.lead * 0.28, time);
+            }
         }
     }
+
+    // Kurzer Jubel-Ruf der Figur - drei schnelle Toene mit Vibrato
+    playCheer(up = true) {
+        if (!this.initialized || !this.sfxEnabled) return;
+        const ctx = this.audioContext, time = ctx.currentTime;
+        const g = ctx.createGain(); g.gain.value = 0.5; g.connect(this.masterGain);
+        const notes = up ? [523.25, 698.46, 880] : [440, 349.23, 261.63];
+        notes.forEach((f, i) => {
+            const osc = ctx.createOscillator(), ng = ctx.createGain();
+            const lfo = ctx.createOscillator(), lg = ctx.createGain();
+            osc.type = 'square'; osc.frequency.value = f;
+            lfo.type = 'sine'; lfo.frequency.value = 14; lg.gain.value = f * 0.02;
+            lfo.connect(lg); lg.connect(osc.frequency);
+            const t0 = time + i * 0.07;
+            ng.gain.setValueAtTime(0.34, t0);
+            ng.gain.exponentialRampToValueAtTime(0.01, t0 + 0.14);
+            osc.connect(ng); ng.connect(g);
+            osc.start(t0); osc.stop(t0 + 0.14);
+            lfo.start(t0); lfo.stop(t0 + 0.14);
+        });
+    }
+
     stopMusic() { this.isPlaying = false; if (this.timerID) { clearTimeout(this.timerID); this.timerID = null; } }
     setBPM(bpm) { this.currentBPM = Math.min(220, Math.max(100, bpm)); }
     toggleMusic() {
@@ -386,6 +758,7 @@ class PlayerDataManager {
                 this.clearedStages = Array.isArray(d.clearedStages) ? d.clearedStages : [];
                 this.stageHighScores = d.stageHighScores || {};
                 this.seenStories = Array.isArray(d.seenStories) ? d.seenStories : [];
+                this.handheldMode = d.handheldMode !== false;
                 this.musicEnabled = d.musicEnabled !== false;
                 this.sfxEnabled = d.sfxEnabled !== false;
                 // Sicherstellen, dass Basis-Items nie fehlen (z.B. nach altem Spielstand)
@@ -407,6 +780,7 @@ class PlayerDataManager {
         this.bestCombo = 0; this.totalCoinsEarned = 0; this.runsPlayed = 0;
         this.bestSpeed = 1.0; this.modeHighScores = {};
         this.clearedStages = []; this.stageHighScores = {}; this.seenStories = [];
+        this.handheldMode = true;
         this.musicEnabled = true; this.sfxEnabled = true;
     }
     saveData() {
@@ -423,6 +797,7 @@ class PlayerDataManager {
                 modeHighScores: this.modeHighScores,
                 clearedStages: this.clearedStages, stageHighScores: this.stageHighScores,
                 seenStories: this.seenStories,
+                handheldMode: this.handheldMode,
                 musicEnabled: this.musicEnabled, sfxEnabled: this.sfxEnabled
             }));
         } catch (e) {}
@@ -576,7 +951,13 @@ const ALBUM_GAMES = [
             { key: 'EdgarRoll', name: 'Rollen', color: 0x9B59B6 }, { key: 'EdgarBounce', name: 'Hüpfen', color: 0x9B59B6 },
             { key: 'EdgarGoal', name: 'Tor', color: 0x9B59B6 }, { key: 'EdgarDodge', name: 'Ausweichen', color: 0x9B59B6 },
             { key: 'EdgarPinball', name: 'Flipper', color: 0x9B59B6 }, { key: 'EdgarGolf', name: 'Minigolf', color: 0x9B59B6 },
-            { key: 'EdgarBrick', name: 'Steine', color: 0x9B59B6 }
+            { key: 'EdgarBrick', name: 'Steine', color: 0x9B59B6 },
+            // Bunte Alltagsspiele
+            { key: 'BalloonPop', name: 'Platzen', color: 0x36c5f0 }, { key: 'TrafficLight', name: 'Ampel', color: 0x54b34a },
+            { key: 'SockMatch', name: 'Socken', color: 0xffd45e }, { key: 'WaterFlower', name: 'Gießen', color: 0x4bb8e8 },
+            { key: 'PizzaTopping', name: 'Belegen', color: 0xffb648 }, { key: 'GoalkeeperDive', name: 'Halten', color: 0x2f9440 },
+            { key: 'StarConnect', name: 'Sternbild', color: 0x7b5cd6 }, { key: 'CakeCatch', name: 'Kuchen', color: 0xf07ab0 },
+            { key: 'BrushTeeth', name: 'Putzen', color: 0x2fb6dd }, { key: 'PetTheAnimal', name: 'Streicheln', color: 0xffe27a }
 ];
 
 const SHOP_ITEMS = [
@@ -761,15 +1142,45 @@ const Art = {
 };
 
 // ======================================================================
+// FARBEN
+// Das Vorbild war knallbunt, nicht dunkel. Jede Farbe, die ein Minispiel
+// anfordert, wird hier auf kraeftig und hell gezogen - so werden alle
+// Spiele auf einen Schlag bunter, ohne sie einzeln anzufassen.
+// ======================================================================
+const Pop = {
+    vivid(color, satBoost = 1.9, minLight = 0.72) {
+        const c = Phaser.Display.Color.ValueToColor(color);
+        const hsv = Phaser.Display.Color.RGBToHSV(c.red, c.green, c.blue);
+        const s = Math.min(1, Math.max(hsv.s * satBoost, 0.62));
+        const v = Math.min(1, Math.max(hsv.v * 1.5, minLight));
+        const out = Phaser.Display.Color.HSVToRGB(hsv.h, s, v);
+        const r = out.r !== undefined ? out.r : out.red;
+        const g = out.g !== undefined ? out.g : out.green;
+        const b = out.b !== undefined ? out.b : out.blue;
+        return Phaser.Display.Color.GetColor(r, g, b);
+    },
+    // Etwas dunklere Variante fuer den unteren Rand des Verlaufs
+    deeper(color, amount = 0.72) {
+        const c = Phaser.Display.Color.ValueToColor(color);
+        const hsv = Phaser.Display.Color.RGBToHSV(c.red, c.green, c.blue);
+        const out = Phaser.Display.Color.HSVToRGB(hsv.h, Math.min(1, hsv.s * 1.12), hsv.v * amount);
+        const r = out.r !== undefined ? out.r : out.red;
+        const g = out.g !== undefined ? out.g : out.green;
+        const b = out.b !== undefined ? out.b : out.blue;
+        return Phaser.Display.Color.GetColor(r, g, b);
+    }
+};
+
+// ======================================================================
 // THEMES - jede Figur bekommt eine eigene Farbwelt und Kulisse
 // ======================================================================
 const Themes = {
-    zobel:     { sky: [0x2b5f3a, 0x0d1f14], accent: 0xffc46b, glow: 0x8B7355, kind: 'forest' },
-    swaggy:    { sky: [0x0a6e94, 0x021d2e], accent: 0x6be5ff, glow: 0xFFA500, kind: 'ocean'  },
-    dude:      { sky: [0x3b3f5c, 0x0d0f18], accent: 0x7aa2ff, glow: 0x4169E1, kind: 'scrap'  },
-    kaeppchen: { sky: [0x4a2230, 0x140a10], accent: 0xff8fa3, glow: 0xE63946, kind: 'forest' },
-    edgar:     { sky: [0x3a1b5e, 0x0e0618], accent: 0xc79bff, glow: 0x9B59B6, kind: 'arena'  },
-    neutral:   { sky: [0x181d3a, 0x05060f], accent: 0x00ff88, glow: 0x00ff88, kind: 'grid'   },
+    zobel:     { sky: [0x7fd858, 0x2f9440], accent: 0xffe066, glow: 0x8B7355, kind: 'forest' },
+    swaggy:    { sky: [0x35d6f5, 0x0f7fc4], accent: 0xfff27a, glow: 0xFFA500, kind: 'ocean'  },
+    dude:      { sky: [0x8fa8ff, 0x4257c9, ], accent: 0xffd166, glow: 0x4169E1, kind: 'scrap'  },
+    kaeppchen: { sky: [0xff9db5, 0xd6455f], accent: 0xfff0a0, glow: 0xE63946, kind: 'forest' },
+    edgar:     { sky: [0xc79bff, 0x7b3fd4], accent: 0xffe066, glow: 0x9B59B6, kind: 'arena'  },
+    neutral:   { sky: [0x4de2ff, 0x1a63c9], accent: 0xfff27a, glow: 0x00ff88, kind: 'grid'   },
 
     get(key) { return this[key] || this.neutral; },
     forCurrent() { return this.get(CharacterManager.currentCharacter); }
@@ -1184,15 +1595,72 @@ const PostFX = {
         const cam = scene.cameras.main;
         if (!scene.renderer || scene.renderer.type !== Phaser.WEBGL || !cam.postFX) return;
         try {
+            if (Handheld.enabled()) {
+                // Handheld-Modus: grobes Pixelraster und blassere Farben wie auf
+                // einem alten Taschenspiel-Bildschirm. Bloom passt da nicht dazu.
+                cam.postFX.addPixelate(Handheld.PIXEL);
+                const cm = cam.postFX.addColorMatrix();
+                cm.saturate(-0.10);
+                cm.contrast(0.12);
+                cm.brightness(1.06);
+                if (opts.vignette !== false) cam.postFX.addVignette(0.5, 0.5, 1.0, 0.16);
+                return;
+            }
             if (opts.bloom !== false && Quality.high()) {
                 cam.postFX.addBloom(0xffffff, 1, 1, opts.bloomStrength !== undefined ? opts.bloomStrength * 0.7 : 0.38, opts.bloomBlur || 0.65);
             }
             if (opts.vignette !== false) {
-                cam.postFX.addVignette(0.5, 0.5, opts.vignetteRadius || 0.9, opts.vignetteStrength || 0.42);
+                cam.postFX.addVignette(0.5, 0.5, opts.vignetteRadius || 1.0, (opts.vignetteStrength || 0.42) * 0.5);
             }
         } catch (e) {
             // Ältere Renderer ohne FX-Unterstützung einfach überspringen
         }
+    }
+};
+
+// ======================================================================
+// HANDHELD-MODUS
+// Holt die Optik des kleinen Klapp-Spielgeraets zurueck: grobe Pixel,
+// sichtbares LCD-Raster und ein Rahmen, der das Bild wie ein Display
+// wirken laesst.
+// ======================================================================
+const Handheld = {
+    PIXEL: 1.6,                 // Staerke des Pixelrasters (mehr macht kleinen Text unlesbar)
+    enabled() { return playerData.handheldMode !== false; },
+    toggle() {
+        playerData.handheldMode = !this.enabled();
+        playerData.saveData();
+        return this.enabled();
+    },
+
+    // Feines Gitter, das die einzelnen Bildpunkte andeutet
+    buildTexture(scene) {
+        if (scene.textures.exists('lcd-grid')) return;
+        const cell = 4;
+        const tex = scene.textures.createCanvas('lcd-grid', 800, 600);
+        const ctx = tex.getContext();
+        ctx.clearRect(0, 0, 800, 600);
+        // Senkrechte Linien kraeftiger als waagerechte - so sehen echte
+        // Fluessigkristall-Anzeigen aus der Naehe aus
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        for (let x = 0; x < 800; x += cell) ctx.fillRect(x, 0, 1, 600);
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        for (let y = 0; y < 600; y += cell) ctx.fillRect(0, y, 800, 1);
+        tex.refresh();
+    },
+
+    // Legt Raster und Displayrand ueber die Szene
+    overlay(scene) {
+        if (!this.enabled()) return null;
+        this.buildTexture(scene);
+        const grid = scene.add.image(400, 300, 'lcd-grid')
+            .setDepth(2800).setAlpha(0.75).setScrollFactor(0);
+        // Leichter Grünstich und Aufhellung an den Raendern - typisch fuer
+        // durchleuchtete Fluessigkristall-Anzeigen
+        const sheen = scene.add.image(400, 300, 'fx-glow')
+            .setTint(0xbfffe0).setBlendMode(Phaser.BlendModes.ADD)
+            .setDisplaySize(1100, 900).setAlpha(0.05).setDepth(2801).setScrollFactor(0);
+        return { grid, sheen };
     }
 };
 
@@ -1285,7 +1753,10 @@ const CharacterManager = {
                 { key: 'WhackAMole', name: 'HAU DRAUF!', duration: 5000, keys: '🖱️ KLICK', music: 'rush' },
                 { key: 'CountThem', name: 'ZÄHLEN!', duration: 5000, keys: '🖱️ KLICK', music: 'puzzle' },
                 { key: 'PickTheNose', name: 'POPELN!', duration: 4000, keys: '🖱️ ZIEHEN', music: 'happy' },
-                { key: 'SwatTheFly', name: 'KLATSCHEN!', duration: 4500, keys: '🖱️ KLICK', music: 'rush' }
+                { key: 'SwatTheFly', name: 'KLATSCHEN!', duration: 4500, keys: '🖱️ KLICK', music: 'rush' },
+                { key: 'PetTheAnimal', name: 'STREICHELN!', duration: 4500, keys: '🖱️ MAUS', music: 'calm' },
+                { key: 'WaterFlower', name: 'GIESSEN!', duration: 4500, keys: '⌨️ ALLE', music: 'happy' },
+                { key: 'StarConnect', name: 'STERNBILD!', duration: 5000, keys: '🖱️ KLICK', music: 'puzzle' }
             ],
             boss: { key: 'BossGame', name: 'ZOBEL BOSS!' }
         },
@@ -1326,7 +1797,10 @@ const CharacterManager = {
                 { key: 'SwaggyHook', name: 'ANGLER!', duration: 4500, keys: '← →', music: 'tense' },
                 { key: 'RhythmTap', name: 'RHYTHMUS!', duration: 5000, keys: 'SPACE', music: 'happy' },
                 { key: 'AvoidLaser', name: 'LASER!', duration: 4500, keys: '← →', music: 'tense' },
-                { key: 'PickTheNose', name: 'POPELN!', duration: 4000, keys: '🖱️ ZIEHEN', music: 'happy' }
+                { key: 'PickTheNose', name: 'POPELN!', duration: 4000, keys: '🖱️ ZIEHEN', music: 'happy' },
+                { key: 'BalloonPop', name: 'PLATZEN!', duration: 4500, keys: '🖱️ KLICK', music: 'rush' },
+                { key: 'CakeCatch', name: 'KUCHEN!', duration: 5000, keys: '🖱️ MAUS', music: 'happy' },
+                { key: 'BrushTeeth', name: 'PUTZEN!', duration: 4500, keys: '🖱️ MAUS', music: 'rush' }
             ],
             boss: { key: 'SwaggyBoss', name: 'SWAGGY BOSS!' }
         },
@@ -1370,7 +1844,10 @@ const CharacterManager = {
                 { key: 'ReactionTest', name: 'REAKTION!', duration: 4500, keys: '⌛ WARTE', music: 'tense' },
                 { key: 'AvoidLaser', name: 'LASER!', duration: 4500, keys: '← →', music: 'tense' },
                 { key: 'StompIt', name: 'TRETEN!', duration: 4000, keys: 'SPACE', music: 'action' },
-                { key: 'BlowCandles', name: 'PUSTEN!', duration: 4500, keys: 'SPACE', music: 'rush' }
+                { key: 'BlowCandles', name: 'PUSTEN!', duration: 4500, keys: 'SPACE', music: 'rush' },
+                { key: 'TrafficLight', name: 'AMPEL!', duration: 5500, keys: '→ HALTEN', music: 'tense' },
+                { key: 'SockMatch', name: 'SOCKEN!', duration: 4500, keys: '🖱️ KLICK', music: 'puzzle' },
+                { key: 'PizzaTopping', name: 'BELEGEN!', duration: 4000, keys: '🖱️ KLICK', music: 'happy' }
             ],
             boss: { key: 'BoxingBoss', name: 'BOXING BOSS!' }
         },
@@ -1413,7 +1890,10 @@ const CharacterManager = {
                 { key: 'WhackAMole', name: 'HAU DRAUF!', duration: 5000, keys: '🖱️ KLICK', music: 'rush' },
                 { key: 'CountThem', name: 'ZÄHLEN!', duration: 5000, keys: '🖱️ KLICK', music: 'puzzle' },
                 { key: 'SwatTheFly', name: 'KLATSCHEN!', duration: 4500, keys: '🖱️ KLICK', music: 'rush' },
-                { key: 'BlowCandles', name: 'PUSTEN!', duration: 4500, keys: 'SPACE', music: 'happy' }
+                { key: 'BlowCandles', name: 'PUSTEN!', duration: 4500, keys: 'SPACE', music: 'happy' },
+                { key: 'PizzaTopping', name: 'BELEGEN!', duration: 4000, keys: '🖱️ KLICK', music: 'happy' },
+                { key: 'WaterFlower', name: 'GIESSEN!', duration: 4500, keys: '⌨️ ALLE', music: 'happy' },
+                { key: 'SockMatch', name: 'SOCKEN!', duration: 4500, keys: '🖱️ KLICK', music: 'puzzle' }
             ],
             boss: { key: 'KaeppchenBoss', name: 'WOLF BOSS!' }
         },
@@ -1455,7 +1935,10 @@ const CharacterManager = {
                 { key: 'EdgarBrick', name: 'STEINE!', duration: 5500, keys: '← →', music: 'action' },
                 { key: 'RhythmTap', name: 'RHYTHMUS!', duration: 5000, keys: 'SPACE', music: 'happy' },
                 { key: 'KeyDuel', name: 'TAUZIEHEN!', duration: 5000, keys: 'SPACE', music: 'action' },
-                { key: 'StompIt', name: 'TRETEN!', duration: 4000, keys: 'SPACE', music: 'action' }
+                { key: 'StompIt', name: 'TRETEN!', duration: 4000, keys: 'SPACE', music: 'action' },
+                { key: 'GoalkeeperDive', name: 'HALTEN!', duration: 4000, keys: '← →', music: 'tense' },
+                { key: 'BalloonPop', name: 'PLATZEN!', duration: 4500, keys: '🖱️ KLICK', music: 'rush' },
+                { key: 'StarConnect', name: 'STERNBILD!', duration: 5000, keys: '🖱️ KLICK', music: 'puzzle' }
             ],
             boss: { key: 'EdgarBoss', name: 'EDGAR BOSS!' }
         }
@@ -1743,6 +2226,7 @@ class BaseMicrogame extends Phaser.Scene {
         Juice.resetTimeScale(this);
         Art.build(this);
         PostFX.apply(this, { bloomStrength: 0.42, vignetteStrength: 0.34 });
+        Handheld.overlay(this);
 
         this.createFuse();
         this.inputBufferActive = true;
@@ -2071,10 +2555,13 @@ class BaseMicrogame extends Phaser.Scene {
         // Die vom Minispiel gewünschte Farbe als Tönung darüberlegen,
         // damit jedes Spiel seine eigene Stimmung behält (als Textur, nicht als
         // Dutzende Rechtecke - das spart pro Bild spürbar Rechenzeit).
-        // Über der gesamten Theme-Kulisse liegen (Bäume, Strahlen, Gitter enden
-        // bei -890), sonst schneiden die Silhouetten durch helle Spielflächen.
-        return this.add.image(400, 300, Sky.gradientTexture(this, topColor, bottomColor))
-            .setDisplaySize(800, 600).setAlpha(0.6).setDepth(-880);
+        // Die vom Minispiel gewuenschte Farbe wird kraeftig und hell gezogen -
+        // dadurch wirken alle Spiele bunt statt duester. Liegt ueber der
+        // Theme-Kulisse, damit keine Silhouetten durchschneiden.
+        const top = Pop.vivid(topColor);
+        const bottom = Pop.deeper(Pop.vivid(bottomColor), 0.78);
+        return this.add.image(400, 300, Sky.gradientTexture(this, top, bottom))
+            .setDisplaySize(800, 600).setAlpha(0.94).setDepth(-880);
     }
 
     spawnAwayFromCursor(minDist = 150) {
@@ -5587,6 +6074,546 @@ class StompIt extends BaseMicrogame {
     }
 }
 
+// ======================================================================
+// NEUE BUNTE MINISPIELE
+// ======================================================================
+
+// BalloonPop - platze nur die Ballons in der gezeigten Farbe
+class BalloonPop extends BaseMicrogame {
+    constructor() { super({ key: 'BalloonPop' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0x36c5f0, 0x1f8fd0);
+        this.gameTitle('PLATZEN!', '#ffffff');
+
+        const colors = [
+            { c: 0xff4757, n: 'ROT' }, { c: 0x2ed573, n: 'GRÜN' },
+            { c: 0xffa502, n: 'ORANGE' }, { c: 0x5352ed, n: 'BLAU' }
+        ];
+        const target = Phaser.Utils.Array.GetRandom(colors);
+        this.targetColor = target.c;
+        this.balloons = [];
+        this.hint('Nur die ' + target.n + 'EN Ballons!');
+
+        const need = this.diff(2, 3, 4);
+        this.popped = 0;
+        this.counterText = this.counter('0 / ' + need, '#ffffff');
+
+        // Farbige Ballons verteilen, davon genug in der Zielfarbe
+        const total = this.diff(8, 10, 12);
+        const list = [];
+        for (let i = 0; i < total; i++) {
+            list.push(i < need + 1 ? target : Phaser.Utils.Array.GetRandom(colors.filter(c => c.c !== target.c)));
+        }
+        Phaser.Utils.Array.Shuffle(list).forEach((col, i) => {
+            const x = 90 + (i % 6) * 125, y = 200 + Math.floor(i / 6) * 130;
+            const b = this.add.container(x, y);
+            const body = this.add.ellipse(0, 0, 62, 76, col.c).setStrokeStyle(3, 0xffffff, 0.8);
+            const shine = this.add.ellipse(-14, -18, 16, 22, 0xffffff, 0.5);
+            const string = this.add.rectangle(0, 46, 2, 34, 0xffffff, 0.6);
+            b.add([string, body, shine]);
+            b.colorValue = col.c;
+            this.balloons.push(b);
+            b.setInteractive(new Phaser.Geom.Rectangle(-34, -42, 68, 90), Phaser.Geom.Rectangle.Contains, { useHandCursor: true });
+            this.tweens.add({ targets: b, y: y - 12, duration: 900 + i * 60, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+            b.on('pointerdown', () => {
+                if (this.hasEnded || this.inputBufferActive) return;
+                if (col.c === target.c) {
+                    FX.burst(this, b.x, b.y, col.c, 14, 110);
+                    musicEngine.playSFX('click');
+                    b.destroy();
+                    this.popped++;
+                    this.counterText.setText(this.popped + ' / ' + need);
+                    if (this.popped >= need) this.win();
+                } else this.lose();
+            });
+        });
+        this.startTimer();
+    }
+}
+
+// TrafficLight - bei Grün losfahren, bei Rot sofort stehen bleiben
+class TrafficLight extends BaseMicrogame {
+    constructor() { super({ key: 'TrafficLight' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0x9be36d, 0x54b34a);
+        this.gameTitle('AMPEL!', '#ffffff');
+        this.hint('→ halten bei Grün, loslassen bei Rot');
+
+        this.add.rectangle(400, 520, 800, 120, 0x555f6e);
+        for (let x = 20; x < 800; x += 70) this.add.rectangle(x, 520, 36, 6, 0xffffff, 0.8);
+
+        // Ampel
+        this.add.rectangle(660, 190, 74, 190, 0x2f3542).setStrokeStyle(4, 0x1e2129);
+        this.lampRed = this.add.circle(660, 140, 24, 0x4a1520);
+        this.lampGreen = this.add.circle(660, 240, 24, 0x14401f);
+
+        this.carX = 80;
+        this.car = CharacterManager.draw(this, this.carX, 462, 0.9);
+        this.goal = 620;
+        this.add.rectangle(this.goal, 470, 6, 120, 0xffffff, 0.7);
+        this.add.text(this.goal, 390, 'ZIEL', { font: 'bold 14px Orbitron', fill: '#ffffff' }).setOrigin(0.5);
+
+        this.green = true;
+        this.setLight(true);
+        this.scheduleSwitch();
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.startTimer();
+    }
+    setLight(green) {
+        this.green = green;
+        if (!green) this.redAt = this.time.now;
+        this.lampRed.setFillStyle(green ? 0x4a1520 : 0xff3b4e);
+        this.lampGreen.setFillStyle(green ? 0x2ed573 : 0x14401f);
+        if (!green) Juice.flash(this, 0xff3b4e, 0.18, 180);
+    }
+    scheduleSwitch() {
+        if (this.hasEnded) return;
+        const wait = this.green ? Phaser.Math.Between(800, 1350) / this.gameSpeed : Phaser.Math.Between(360, 600);
+        this.time.delayedCall(wait, () => {
+            if (this.hasEnded) return;
+            this.setLight(!this.green);
+            this.scheduleSwitch();
+        });
+    }
+    update(time, delta) {
+        super.update();
+        if (this.hasEnded) return;
+        const dt = Math.min(delta, 50) / 1000;
+        const moving = this.isRight();
+        if (moving) {
+            this.carX += 520 * dt;
+            this.car.x = this.carX;
+            // Kleine Schrecksekunde, sonst waere Rot nicht fair zu erwischen
+            if (!this.green && !this.inputBufferActive && this.time.now - this.redAt > 350) {
+                Juice.shake(this, 1, 220); this.lose(); return;
+            }
+        }
+        if (this.carX >= this.goal) this.win();
+    }
+}
+
+// SockMatch - finde das passende Sockenpaar
+class SockMatch extends BaseMicrogame {
+    constructor() { super({ key: 'SockMatch' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0xffd45e, 0xf0a93b);
+        this.gameTitle('SOCKEN!', '#5a3b00');
+        this.hint('Klicke die zwei gleichen Socken');
+
+        const palette = [0xff4757, 0x2ed573, 0x3742fa, 0xffd32a, 0x00d2d3, 0xff7f11, 0xa55eea];
+        const pairColor = Phaser.Utils.Array.GetRandom(palette);
+        const others = Phaser.Utils.Array.Shuffle(palette.filter(c => c !== pairColor));
+
+        const slots = this.diff(6, 8, 8);
+        const list = [pairColor, pairColor];
+        for (let i = 0; i < slots - 2; i++) list.push(others[i % others.length]);
+        Phaser.Utils.Array.Shuffle(list);
+
+        this.found = 0;
+        const cols = 4;
+        list.forEach((col, i) => {
+            const x = 180 + (i % cols) * 150, y = 240 + Math.floor(i / cols) * 150;
+            const sock = this.add.container(x, y);
+            const g = this.add.graphics();
+            g.fillStyle(col, 1);
+            g.fillRoundedRect(-22, -50, 44, 74, 10);       // Schaft
+            g.fillRoundedRect(-22, 10, 68, 40, 14);        // Fuß
+            g.fillStyle(0xffffff, 0.85);
+            g.fillRect(-22, -50, 44, 12);                   // Bündchen
+            g.lineStyle(3, 0x00000033);
+            g.strokeRoundedRect(-22, -50, 44, 74, 10);
+            sock.add(g);
+            sock.setInteractive(new Phaser.Geom.Rectangle(-30, -55, 90, 110), Phaser.Geom.Rectangle.Contains, { useHandCursor: true });
+            this.tweens.add({ targets: sock, angle: Phaser.Math.Between(-6, 6), duration: 1100 + i * 70, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+            sock.on('pointerdown', () => {
+                if (this.hasEnded || this.inputBufferActive || sock.taken) return;
+                if (col === pairColor) {
+                    sock.taken = true;
+                    this.found++;
+                    FX.burst(this, x, y, col, 10, 80);
+                    musicEngine.playSFX('click');
+                    this.tweens.add({ targets: sock, scaleX: 1.25, scaleY: 1.25, alpha: 0.35, duration: 180 });
+                    if (this.found >= 2) this.win();
+                } else this.lose();
+            });
+        });
+        this.startTimer();
+    }
+}
+
+// WaterFlower - die welke Blume giessen, bis sie aufblueht
+class WaterFlower extends BaseMicrogame {
+    constructor() { super({ key: 'WaterFlower' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0x8fe3ff, 0x4bb8e8);
+        this.gameTitle('GIESSEN!', '#0a3d52');
+        this.hint('SPACE hämmern, bis die Blume aufblüht');
+
+        this.add.rectangle(400, 540, 800, 120, 0x8b5a2b);
+        this.add.rectangle(400, 486, 800, 16, 0x5fa832);
+        this.add.ellipse(400, 500, 190, 46, 0x7a4a22);
+
+        this.growth = 0;
+        this.need = this.diff(10, 12, 15);
+
+        this.stem = this.add.rectangle(400, 470, 12, 10, 0x3f9c34).setOrigin(0.5, 1);
+        this.petals = [];
+        for (let i = 0; i < 6; i++) {
+            const a = (Math.PI * 2 * i) / 6;
+            const p = this.add.ellipse(400 + Math.cos(a) * 34, 470 + Math.sin(a) * 34, 40, 26, 0xff5c8a)
+                .setRotation(a).setScale(0);
+            this.petals.push({ node: p, a });
+        }
+        this.core = this.add.circle(400, 470, 20, 0xffd93d).setScale(0);
+        this.counterText = this.counter('0%', '#0a3d52');
+
+        const water = () => {
+            if (this.hasEnded || this.inputBufferActive) return;
+            this.growth++;
+            const k = Math.min(1, this.growth / this.need);
+            this.stem.height = 10 + k * 150;
+            const headY = 470 - k * 150;
+            this.core.setPosition(400, headY).setScale(k);
+            this.petals.forEach(p => {
+                p.node.setPosition(400 + Math.cos(p.a) * 34 * k, headY + Math.sin(p.a) * 34 * k).setScale(k);
+            });
+            this.counterText.setText(Math.round(k * 100) + '%');
+            // Wassertropfen
+            const d = this.add.circle(Phaser.Math.Between(360, 440), 220, 5, 0x6bd6ff);
+            this.tweens.add({ targets: d, y: headY, alpha: 0, duration: 260, onComplete: () => d.destroy() });
+            if (this.growth >= this.need) { FX.burst(this, 400, headY, 0xff5c8a, 20, 160); this.win(); }
+        };
+        this.input.keyboard.on('keydown', (e) => { if (e && e.repeat) return; water(); });
+        this.input.on('pointerdown', water);
+        this.startTimer();
+    }
+}
+
+// PizzaTopping - den gewuenschten Belag auf die Pizza legen
+class PizzaTopping extends BaseMicrogame {
+    constructor() { super({ key: 'PizzaTopping' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0xffb648, 0xe8862c);
+        this.gameTitle('BELEGEN!', '#5a2f00');
+
+        const toppings = ['🍄', '🫒', '🌶️', '🧀', '🍅', '🐟'];
+        this.want = Phaser.Utils.Array.GetRandom(toppings);
+        this.hint('Der Gast will: ' + this.want);
+
+        // Pizza
+        this.add.circle(400, 320, 118, 0xe8a33d);
+        this.add.circle(400, 320, 104, 0xd94f3d);
+        this.add.circle(400, 320, 96, 0xf6d97a);
+        this.add.circle(400, 148, 40, 0xffffff, 0.9).setStrokeStyle(4, 0x8a4a00);
+        this.add.text(400, 148, this.want, { font: '46px Arial' }).setOrigin(0.5);
+        this.add.text(400, 200, 'BITTE!', { font: 'bold 18px Orbitron', fill: '#5a2f00' }).setOrigin(0.5);
+
+        const wrong = Phaser.Utils.Array.Shuffle(toppings.filter(t => t !== this.want)).slice(0, 3);
+        Phaser.Utils.Array.Shuffle([this.want, ...wrong]).forEach((t, i) => {
+            const x = 155 + i * 165;
+            this.add.circle(x, 490, 46, 0xffffff, 0.22).setStrokeStyle(3, 0xffffff, 0.7);
+            const btn = this.add.text(x, 490, t, { font: '48px Arial' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            btn.on('pointerover', () => btn.setScale(1.18));
+            btn.on('pointerout', () => btn.setScale(1));
+            btn.on('pointerdown', () => {
+                if (this.hasEnded || this.inputBufferActive) return;
+                if (t === this.want) {
+                    for (let k = 0; k < 6; k++) {
+                        const a = (Math.PI * 2 * k) / 6;
+                        this.add.text(400 + Math.cos(a) * 55, 320 + Math.sin(a) * 55, t, { font: '28px Arial' }).setOrigin(0.5);
+                    }
+                    FX.burst(this, 400, 320, 0xffd93d, 16, 140);
+                    this.win();
+                } else this.lose();
+            });
+        });
+        this.startTimer();
+    }
+}
+
+// GoalkeeperDive - in die richtige Ecke hechten
+class GoalkeeperDive extends BaseMicrogame {
+    constructor() { super({ key: 'GoalkeeperDive' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0x6fd86f, 0x2f9440);
+        this.gameTitle('HALTEN!', '#ffffff');
+        this.hint('Achte auf den Anlauf – dann ← oder →');
+
+        // Tor
+        this.add.rectangle(400, 210, 560, 14, 0xffffff);
+        this.add.rectangle(126, 300, 14, 194, 0xffffff);
+        this.add.rectangle(674, 300, 14, 194, 0xffffff);
+        for (let x = 146; x < 668; x += 34) this.add.rectangle(x, 300, 2, 180, 0xffffff, 0.28);
+        this.add.rectangle(400, 470, 800, 90, 0x3c8a3c, 0.35);
+
+        this.keeper = CharacterManager.draw(this, 400, 360, 0.85);
+        this.side = Phaser.Math.Between(0, 1) ? -1 : 1;
+        this.dir = 0;
+
+        // Schuetze unten mit sichtbarem Anlauf - das ist die Vorwarnung
+        this.shooter = this.add.text(400, 540, '🦶', { font: '46px Arial' }).setOrigin(0.5);
+        this.ball = this.add.circle(400, 520, 17, 0xffffff).setStrokeStyle(3, 0x222222).setDepth(6);
+        this.ballT = 0;
+        this.flight = 620;
+        this.shootDelay = this.diff(1500, 1200, 950) / this.gameSpeed;
+        this.tellDone = false;
+        this.resolved = false;
+
+        const dive = (dir) => {
+            if (this.hasEnded || this.dir !== 0 || this.inputBufferActive) return;
+            this.dir = dir;
+            this.tweens.add({ targets: this.keeper, x: 400 + dir * 200, y: 330, angle: dir * 62, duration: 200, ease: 'Quad.easeOut' });
+        };
+        this.input.keyboard.on('keydown', (e) => {
+            if (!e) return;
+            if (e.keyCode === 37 || e.keyCode === 65) dive(-1);
+            else if (e.keyCode === 39 || e.keyCode === 68) dive(1);
+        });
+        this.input.on('pointerdown', (p) => dive(p.x < 400 ? -1 : 1));
+        this.startTimer();
+    }
+    update(time, delta) {
+        super.update();
+        if (this.hasEnded) return;
+        const dt = Math.min(delta, 50) / 1000;
+        this.ballT += dt * 1000;
+
+        // Kurz vor dem Schuss stellt sich der Schuetze sichtbar auf eine Seite
+        if (!this.tellDone && this.ballT > this.shootDelay - 320) {
+            this.tellDone = true;
+            this.tweens.add({ targets: this.shooter, x: 400 - this.side * 46, angle: -this.side * 22, duration: 200 });
+        }
+        if (this.ballT > this.shootDelay) {
+            const k = Math.min(1, (this.ballT - this.shootDelay) / this.flight);
+            this.ball.x = 400 + this.side * 200 * k;
+            this.ball.y = 520 - 230 * k;
+            this.ball.setScale(1 - k * 0.3);
+            if (k >= 1 && !this.resolved) {
+                this.resolved = true;
+                if (this.dir === this.side) { FX.burst(this, this.ball.x, this.ball.y, 0xffffff, 18, 140); this.win(); }
+                else this.lose();
+            }
+        }
+    }
+}
+
+// StarConnect - die Sterne in der richtigen Reihenfolge verbinden
+class StarConnect extends BaseMicrogame {
+    constructor() { super({ key: 'StarConnect' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0x7b5cd6, 0x3b2580);
+        this.gameTitle('STERNBILD!', '#ffffff');
+        this.hint('Klicke die Sterne der Reihe nach: 1, 2, 3 …');
+
+        const n = this.diff(4, 5, 6);
+        this.next = 1;
+        this.lines = this.add.graphics().setDepth(5);
+        this.points = [];
+
+        const spots = [];
+        for (let i = 0; i < n; i++) {
+            let x, y, tries = 0;
+            do {
+                x = Phaser.Math.Between(140, 660); y = Phaser.Math.Between(180, 470); tries++;
+            } while (spots.some(s => Phaser.Math.Distance.Between(s.x, s.y, x, y) < 130) && tries < 40);
+            spots.push({ x, y });
+        }
+
+        spots.forEach((s, i) => {
+            const num = i + 1;
+            const star = this.add.text(s.x, s.y, '⭐', { font: '46px Arial' }).setOrigin(0.5).setDepth(10)
+                .setInteractive({ useHandCursor: true });
+            const label = this.add.text(s.x, s.y + 34, String(num), {
+                font: 'bold 20px Orbitron', fill: '#ffffff', stroke: '#000000', strokeThickness: 4
+            }).setOrigin(0.5).setDepth(11);
+            this.tweens.add({ targets: star, scale: 1.12, duration: 700 + i * 90, yoyo: true, repeat: -1 });
+            this.points.push({ x: s.x, y: s.y });
+            star.on('pointerdown', () => {
+                if (this.hasEnded || this.inputBufferActive) return;
+                if (num !== this.next) { this.lose(); return; }
+                star.setTint(0xffe066);
+                label.setColor('#ffd93d');
+                FX.burst(this, s.x, s.y, 0xffe066, 10, 80);
+                musicEngine.playSFX('click');
+                if (this.next > 1) {
+                    const p = this.points[this.next - 2];
+                    this.lines.lineStyle(4, 0xffe066, 0.9);
+                    this.lines.lineBetween(p.x, p.y, s.x, s.y);
+                }
+                this.next++;
+                if (this.next > n) { Juice.flash(this, 0xffe066, 0.4, 260); this.win(); }
+            });
+        });
+        this.startTimer();
+    }
+}
+
+// CakeCatch - fallende Kuchenstücke auf dem Teller fangen
+class CakeCatch extends BaseMicrogame {
+    constructor() { super({ key: 'CakeCatch' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0xffc2e0, 0xf07ab0);
+        this.gameTitle('KUCHEN!', '#6b1f45');
+        this.hint('Teller bewegen – nur Kuchen, kein Gemüse!');
+
+        this.need = this.diff(2, 3, 3);
+        this.caught = 0;
+        this.counterText = this.counter('0 / ' + this.need, '#6b1f45');
+
+        this.plateX = 400;
+        this.plate = this.add.ellipse(400, 500, 168, 28, 0xffffff).setStrokeStyle(3, 0xd8d8e0);
+        this.items = [];
+        this.spawn = this.time.addEvent({
+            delay: Math.max(165, 280 / this.gameSpeed), loop: true,
+            callback: () => {
+                if (this.hasEnded) return;
+                const good = Phaser.Math.Between(0, 7) > 0;
+                const n = this.add.text(Phaser.Math.Between(70, 730), -30, good ? '🍰' : '🥦', { font: '40px Arial' }).setOrigin(0.5);
+                n.vy = Phaser.Math.Between(260, 360) * this.gameSpeed;
+                n.good = good;
+                this.items.push(n);
+            }
+        });
+        this.startTimer();
+    }
+    update(time, delta) {
+        super.update();
+        if (this.hasEnded) return;
+        const dt = Math.min(delta, 50) / 1000;
+        this.plateX = Phaser.Math.Clamp(this.input.activePointer.x || 400, 80, 720);
+        this.plate.x = this.plateX;
+
+        for (let i = this.items.length - 1; i >= 0; i--) {
+            const it = this.items[i];
+            it.y += it.vy * dt;
+            it.rotation += dt * 1.2;
+            if (it.y > 640) { it.destroy(); this.items.splice(i, 1); continue; }
+            if (Math.abs(it.x - this.plateX) < 80 && it.y > 468 && it.y < 522) {
+                const good = it.good;
+                it.destroy(); this.items.splice(i, 1);
+                if (good) {
+                    this.caught++;
+                    FX.burst(this, this.plateX, 490, 0xffd93d, 10, 80);
+                    musicEngine.playSFX('click');
+                } else {
+                    // Gemuese kostet einen Punkt - aerglich, aber nicht sofort verloren
+                    this.caught = Math.max(0, this.caught - 1);
+                    FX.burst(this, this.plateX, 490, 0x4caf50, 10, 80);
+                    Juice.shake(this, 0.6, 180);
+                    musicEngine.playSFX('heartbreak');
+                }
+                this.counterText.setText(this.caught + ' / ' + this.need);
+                if (this.caught >= this.need) this.win();
+                return;
+            }
+        }
+    }
+}
+
+// BrushTeeth - die Zähne blitzblank schrubben
+class BrushTeeth extends BaseMicrogame {
+    constructor() { super({ key: 'BrushTeeth' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0x7ce8ff, 0x2fb6dd);
+        this.gameTitle('PUTZEN!', '#08405a');
+        this.hint('Maus hin und her schrubben');
+
+        // Mund mit Zähnen
+        this.add.ellipse(400, 320, 420, 260, 0xd94f6a);
+        this.add.ellipse(400, 360, 320, 130, 0x8e2138);
+        this.teeth = [];
+        for (let i = 0; i < 7; i++) {
+            const x = 190 + i * 70;
+            const t = this.add.rectangle(x, 258, 56, 74, 0xd8cf9a).setStrokeStyle(3, 0xb8ad76);
+            t.clean = 0;
+            this.teeth.push(t);
+        }
+        this.brush = this.add.text(0, 0, '🪥', { font: '54px Arial' }).setOrigin(0.5).setDepth(20).setAngle(30);
+        this.lastX = null;
+        this.scrub = 0;
+        this.need = this.diff(1600, 2100, 2700);
+        this.counterText = this.counter('0%', '#08405a');
+        this.startTimer();
+    }
+    update(time, delta) {
+        super.update();
+        if (this.hasEnded) return;
+        const p = this.input.activePointer;
+        this.brush.setPosition(p.x, p.y);
+        if (this.lastX !== null) {
+            const moved = Math.abs(p.x - this.lastX);
+            // Nur zaehlen, wenn die Buerste ueber den Zaehnen ist
+            if (p.y > 200 && p.y < 330) {
+                this.scrub += moved;
+                const k = Math.min(1, this.scrub / this.need);
+                this.counterText.setText(Math.round(k * 100) + '%');
+                this.teeth.forEach((t, i) => {
+                    const local = Phaser.Math.Clamp(k * this.teeth.length - i, 0, 1);
+                    const c = Phaser.Display.Color.Interpolate.ColorWithColor(
+                        Phaser.Display.Color.ValueToColor(0xd8cf9a),
+                        Phaser.Display.Color.ValueToColor(0xffffff), 100, Math.floor(local * 100));
+                    t.setFillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b));
+                    if (local >= 1 && !t.sparkled) {
+                        t.sparkled = true;
+                        FX.burst(this, t.x, t.y, 0xffffff, 6, 50);
+                    }
+                });
+                if (k >= 1) { Juice.flash(this, 0xffffff, 0.45, 240); this.win(); }
+            }
+        }
+        this.lastX = p.x;
+    }
+}
+
+// PetTheAnimal - die Figur streicheln, bis sie glücklich ist
+class PetTheAnimal extends BaseMicrogame {
+    constructor() { super({ key: 'PetTheAnimal' }); }
+    create() {
+        super.create();
+        this.gradientBackground(0xffe27a, 0xf0b23c);
+        this.gameTitle('STREICHELN!', '#5a3b00');
+        this.hint('Mit der Maus über die Figur streichen');
+
+        this.add.image(400, 430, 'fx-shadow').setDisplaySize(210, 50).setAlpha(0.35);
+        this.pet = CharacterManager.draw(this, 400, 350, 1.0);
+        this.love = 0;
+        this.need = this.diff(1100, 1500, 1900);
+        this.lastP = null;
+        this.counterText = this.counter('♥ 0%', '#c2185b');
+        this.hearts = [];
+        this.startTimer();
+    }
+    update(time, delta) {
+        super.update();
+        if (this.hasEnded) return;
+        const p = this.input.activePointer;
+        if (this.lastP !== null && Phaser.Math.Distance.Between(p.x, p.y, 400, 350) < 150) {
+            const moved = Math.abs(p.x - this.lastP.x) + Math.abs(p.y - this.lastP.y);
+            if (moved > 1) {
+                this.love += moved;
+                const k = Math.min(1, this.love / this.need);
+                this.counterText.setText('♥ ' + Math.round(k * 100) + '%');
+                this.pet.rotation = Math.sin(time / 90) * 0.07;
+                if (Math.random() < 0.14) {
+                    const h = this.add.text(p.x, p.y, '💗', { font: '26px Arial' }).setOrigin(0.5);
+                    this.tweens.add({ targets: h, y: p.y - 70, alpha: 0, duration: 700, onComplete: () => h.destroy() });
+                }
+                if (k >= 1) { FX.burst(this, 400, 340, 0xff6b9d, 22, 180); this.win(); }
+            }
+        }
+        this.lastP = { x: p.x, y: p.y };
+    }
+}
+
 // BOSS GAMES
 class BossGame extends BaseMicrogame {
     constructor() { super({ key: 'BossGame' }); }
@@ -6435,7 +7462,9 @@ class PauseScene extends Phaser.Scene {
             onClick: () => { musicEngine.toggleSFX(); this.scene.restart({ resumeKeys: this.resumeKeys, returnScene: this.returnScene }); }
         });
         UI.button(this, 400, 458, 270, 52, 'AUFGEBEN', { color: UI.RED, onClick: () => this.quitToMenu() });
-        this.add.text(400, 516, 'ESC = weiterspielen', { font: '12px Orbitron', fill: '#6c7590' }).setOrigin(0.5);
+        this.add.text(400, 512, 'Handheld-Optik: ' + (Handheld.enabled() ? 'AN' : 'AUS') + '  (im Menü umschaltbar)',
+            { font: '11px Orbitron', fill: '#6c7590' }).setOrigin(0.5);
+        this.add.text(400, 530, 'ESC = weiterspielen', { font: '11px Orbitron', fill: '#4d5468' }).setOrigin(0.5);
 
         this.input.keyboard.on('keydown-ESC', () => this.resumeGame());
         this.input.keyboard.on('keydown-P', () => this.resumeGame());
@@ -6463,6 +7492,7 @@ class StartScreen extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#05060f');
         Sky.build(this, 'neutral');
         PostFX.apply(this, { bloomStrength: 0.45 });
+        Handheld.overlay(this);
         FX.ambient(this, 0x00ff88, 22);
 
         // Ohne Server blockiert der Browser das Laden der PNGs (file:// gilt als
@@ -6499,6 +7529,7 @@ class StartScreen extends Phaser.Scene {
         this.statsRow();
         this.menuButtons();
 
+        this.toggle(666, 32, '🎮', () => Handheld.toggle(), Handheld.enabled(), true);
         this.toggle(714, 32, '🎵', () => musicEngine.toggleMusic(), musicEngine.musicEnabled);
         this.toggle(762, 32, '🔊', () => musicEngine.toggleSFX(), musicEngine.sfxEnabled);
         this.add.text(400, 582, 'Zobel-Stadt: jede Figur hat ihre eigene Stage  •  WASD oder Pfeiltasten  •  ESC/P = Pause',
@@ -6580,11 +7611,17 @@ class StartScreen extends Phaser.Scene {
         ].forEach(b => UI.button(this, b.x, 498, 190, 46, b.t, { color: b.c, fontSize: 17, onClick: () => this.scene.start(b.s) }));
     }
 
-    toggle(x, y, emoji, fn, state) {
+    toggle(x, y, emoji, fn, state, reload) {
         const bg = this.add.circle(x, y, 20, state ? 0x00ff88 : 0x333a4d).setInteractive({ useHandCursor: true });
         bg.setStrokeStyle(2, 0xffffff, 0.4);
         this.add.text(x, y, emoji, { font: '16px Arial' }).setOrigin(0.5);
-        bg.on('pointerdown', () => { musicEngine.initialize(); bg.setFillStyle(fn() ? 0x00ff88 : 0x333a4d); });
+        bg.on('pointerdown', () => {
+            musicEngine.initialize();
+            const on = fn();
+            bg.setFillStyle(on ? 0x00ff88 : 0x333a4d);
+            // Der Bildlook haengt an der Kamera - Szene neu aufbauen
+            if (reload) this.time.delayedCall(0, () => this.scene.restart());
+        });
     }
 }
 
@@ -6616,6 +7653,7 @@ class CityScene extends Phaser.Scene {
         this.topBar();
         Sky.grain(this);
 
+        Handheld.overlay(this);
         if (this.justCleared) this.celebrateUnlock(this.justCleared);
         this.input.keyboard.on('keydown-ESC', () => this.scene.start('StartScreen'));
     }
@@ -6850,6 +7888,7 @@ class StoryScene extends Phaser.Scene {
         this.charKey = data.character;
         this.type = data.type || 'intro';
         this.stageScore = data.score || 0;
+        this.playLog = data.log || null;
         this.isFinishing = false;
     }
     create() {
@@ -6942,7 +7981,7 @@ class StoryScene extends Phaser.Scene {
         this.tweens.add({ targets: veil, alpha: 1, duration: 220 });
         this.time.delayedCall(240, () => {
             if (this.type === 'intro') this.scene.start('GameScene', { mode: 'stage', soloCharacter: this.charKey });
-            else this.scene.start('StageClearScene', { character: this.charKey, score: this.stageScore });
+            else this.scene.start('StageClearScene', { character: this.charKey, score: this.stageScore, log: this.playLog });
         });
     }
 }
@@ -6952,7 +7991,7 @@ class StoryScene extends Phaser.Scene {
 // ======================================================================
 class StageClearScene extends Phaser.Scene {
     constructor() { super({ key: 'StageClearScene' }); }
-    init(data) { this.charKey = data.character; this.score = data.score || 0; }
+    init(data) { this.charKey = data.character; this.score = data.score || 0; this.playLog = data.log || []; }
     create() {
         Art.build(this);
         const char = CharacterManager.data[this.charKey];
@@ -6969,22 +8008,23 @@ class StageClearScene extends Phaser.Scene {
         this.tweens.add({ targets: title, scale: 1, duration: 440, ease: 'Back.easeOut' });
         this.add.text(400, 146, char.stageName, { font: 'bold 18px Orbitron', fill: UI.hex(char.color) }).setOrigin(0.5);
 
-        this.add.image(400, 330, 'fx-shadow').setDisplaySize(170, 40).setAlpha(0.5);
+        this.add.image(400, 306, 'fx-shadow').setDisplaySize(160, 36).setAlpha(0.5);
         const sp = (char.image === 'dude' && this.textures.exists('dude'))
-            ? this.add.sprite(400, 262, 'dude', 4).setScale(char.scale * 1.6)
-            : (this.textures.exists(char.image) ? this.add.image(400, 262, char.image).setScale(char.scale * 1.3)
-                                                : Zobel.draw(this, 400, 262, 0.9, char.color));
-        this.tweens.add({ targets: sp, y: 244, duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-        FX.burst(this, 400, 262, char.color, 24, 240);
+            ? this.add.sprite(400, 244, 'dude', 4).setScale(char.scale * 1.5)
+            : (this.textures.exists(char.image) ? this.add.image(400, 244, char.image).setScale(char.scale * 1.2)
+                                                : Zobel.draw(this, 400, 244, 0.85, char.color));
+        this.tweens.add({ targets: sp, y: 228, duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        FX.burst(this, 400, 244, char.color, 24, 240);
 
-        UI.panel(this, 400, 396, 470, 96, char.color, 0.1);
-        this.add.text(400, 372, 'Punkte: ' + this.score, { font: 'bold 26px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
-        this.add.text(400, 410, 'Stage-Rekord: ' + (playerData.stageHighScores[this.charKey] || 0), { font: '13px Orbitron', fill: '#ffd93d' }).setOrigin(0.5);
+        UI.panel(this, 400, 360, 470, 76, char.color, 0.1);
+        this.add.text(400, 344, 'Punkte: ' + this.score, { font: 'bold 26px Orbitron', fill: '#00ff88' }).setOrigin(0.5);
+        this.add.text(400, 378, 'Stage-Rekord: ' + (playerData.stageHighScores[this.charKey] || 0), { font: '13px Orbitron', fill: '#ffd93d' }).setOrigin(0.5);
+        this.drawPlayLog();
 
         const order = CharacterManager.characters;
         const next = order[order.indexOf(this.charKey) + 1];
-        this.add.text(400, 458, next ? CharacterManager.data[next].stageName + ' ist jetzt offen!'
-                                     : 'Alle Stages geschafft - die ganze Stadt gehört dir!',
+        this.add.text(400, 172, next ? '➜ ' + CharacterManager.data[next].stageName + ' ist jetzt offen!'
+                                     : '➜ Alle Stages geschafft - die ganze Stadt gehört dir!',
             { font: 'bold 13px Orbitron', fill: '#00d4ff' }).setOrigin(0.5);
 
         UI.button(this, 250, 508, 210, 50, '🏙  ZUR STADT', { fontSize: 17, onClick: () => this.scene.start('CityScene', { justCleared: this.charKey }) });
@@ -6993,6 +8033,45 @@ class StageClearScene extends Phaser.Scene {
 
         this.input.keyboard.on('keydown-ESC', () => this.scene.start('CityScene', { justCleared: this.charKey }));
         this.input.keyboard.on('keydown-ENTER', () => this.scene.start('CityScene', { justCleared: this.charKey }));
+    }
+
+    // Reihe kleiner Felder: jedes gespielte Minispiel mit Haken oder Kreuz.
+    // Sie tauchen nacheinander auf - der kleine Rueckblick am Stage-Ende.
+    drawPlayLog() {
+        const log = this.playLog;
+        if (!log || !log.length) return;
+        const shown = log.slice(-16);
+        const cols = Math.min(shown.length, 8);
+        const rows = Math.ceil(shown.length / 8);
+        const cell = 30, gap = 4;
+        const startX = 400 - ((cols - 1) * (cell + gap)) / 2;
+        const startY = 458 - ((rows - 1) * (cell + gap)) / 2;
+
+        this.add.text(400, 414, 'DEIN LAUF', { font: 'bold 10px Orbitron', fill: '#8b93aa' }).setOrigin(0.5);
+
+        shown.forEach((entry, i) => {
+            const x = startX + (i % 8) * (cell + gap);
+            const y = startY + Math.floor(i / 8) * (cell + gap);
+            const box = this.add.container(x, y).setAlpha(0).setScale(0.3);
+            const g = this.add.graphics();
+            const col = entry.won ? 0x00ff88 : 0xff5c7a;
+            g.fillStyle(col, entry.won ? 0.24 : 0.16);
+            g.fillRoundedRect(-cell / 2, -cell / 2, cell, cell, 5);
+            g.lineStyle(2, col, 0.9);
+            g.strokeRoundedRect(-cell / 2, -cell / 2, cell, cell, 5);
+            box.add(g);
+            box.add(this.add.text(0, 0, entry.won ? '✓' : '✕', {
+                font: 'bold 15px Orbitron', fill: entry.won ? '#00ff88' : '#ff5c7a'
+            }).setOrigin(0.5));
+            // Kleine Punkte zeigen die Schwierigkeitsstufe
+            for (let d = 0; d < entry.level; d++) {
+                box.add(this.add.circle(-6 + d * 6, cell / 2 - 4, 1.6, 0xffd93d));
+            }
+            this.tweens.add({
+                targets: box, alpha: 1, scale: 1, duration: 220,
+                delay: 700 + i * 55, ease: 'Back.easeOut'
+            });
+        });
     }
 }
 
@@ -7075,6 +8154,7 @@ class GameScene extends Phaser.Scene {
         Art.build(this);
         this.cameras.main.setBackgroundColor('#07080f');
         PostFX.apply(this, { bloomStrength: 0.5, vignetteStrength: 0.36 });
+        Handheld.overlay(this);
 
         this.score = 0;
         this.gamesPlayed = 0;
@@ -7084,6 +8164,7 @@ class GameScene extends Phaser.Scene {
         this.secondChanceUsed = false;
         this.isPaused = false;
         this.lastGameKey = null;
+        this.playLog = [];        // Was wurde gespielt und wie ging es aus?
         this.lives = this.mode.lives + (Upgrades.hasExtraLife() ? 1 : 0);
         this.maxLives = this.lives + 2;
 
@@ -7246,23 +8327,28 @@ class GameScene extends Phaser.Scene {
     // ---------- Übergang ----------
     showTransition() {
         musicEngine.stopMusic();
-        const dur = Math.max(520, 1000 / this.gameSpeed);
+        const dur = Math.max(430, 820 / this.gameSpeed);
         const ch = CharacterManager.getCurrentCharacter();
-        const bg = this.add.rectangle(400, 300, 800, 600, playerData.transitionColor, 0.95).setDepth(2900);
-        const glow = this.add.image(400, 340, 'fx-glow').setTint(ch.color)
-            .setBlendMode(Phaser.BlendModes.ADD).setDisplaySize(620, 480).setAlpha(0.3).setDepth(2901);
+
+        // Knallige, wechselnde Vollflaeche statt dunklem Verlauf - so kennt man
+        // die Zwischenbilder aus dem Vorbild. Die Farbe wechselt jede Runde.
+        const flat = GameScene.FLAT_COLORS[this.gamesPlayed % GameScene.FLAT_COLORS.length];
+        const bg = this.add.rectangle(400, 300, 800, 600, flat, 1).setDepth(2900);
+        // Zwei schraege Baender laufen durchs Bild
+        const glow = this.add.rectangle(400, 300, 1200, 150, 0xffffff, 0.10).setAngle(-18).setDepth(2901);
+        this.tweens.add({ targets: glow, y: 180, duration: dur, ease: 'Quad.easeOut' });
 
         const stripes = [];
-        for (let i = 0; i < 7; i++) {
-            const s = this.add.rectangle(-220, 70 + i * 82, 280, 10, ch.color, 0.3).setDepth(2901);
-            this.tweens.add({ targets: s, x: 1020, duration: dur * 0.9, delay: i * 45, ease: 'Quad.easeIn' });
+        for (let i = 0; i < 9; i++) {
+            const s = this.add.rectangle(-240, 40 + i * 70, 300, 14, 0xffffff, 0.16).setDepth(2901);
+            this.tweens.add({ targets: s, x: 1040, duration: dur * 0.85, delay: i * 32, ease: 'Quad.easeIn' });
             stripes.push(s);
         }
 
         const num = this.add.text(400, 104, String(this.gamesPlayed + 1), {
             font: 'bold 108px Orbitron', fill: '#ffffff'
         }).setOrigin(0.5).setDepth(2902);
-        num.setStroke(UI.hex(ch.color), 6).setShadow(0, 0, UI.hex(ch.color), 18, false, true);
+        num.setStroke('#000000', 8).setShadow(3, 4, '#00000066', 0, true, true);
         const nameT = this.add.text(400, 178, ch.name.toUpperCase(), { font: 'bold 26px Orbitron', fill: '#ffffff' }).setOrigin(0.5).setDepth(2902);
 
         this.add.image(400, 452, 'fx-shadow').setDisplaySize(160, 40).setAlpha(0.4).setDepth(2901);
@@ -7395,6 +8481,7 @@ class GameScene extends Phaser.Scene {
         musicEngine.stopMusic();
         this.score++; this.gamesPlayed++; this.gameInWave++;
         this.winStreak++; this.lossStreak = 0; this.combo++;
+        this.playLog.push({ key: gameKey, won: true, level: this.level });
         if (this.combo > this.bestCombo) this.bestCombo = this.combo;
 
         const reward = Math.round((8 + Math.min(this.combo, 10) * 2 + this.level * 3)
@@ -7417,6 +8504,7 @@ class GameScene extends Phaser.Scene {
         musicEngine.stopMusic();
         this.lives--; this.gamesPlayed++; this.gameInWave++;
         this.winStreak = 0; this.lossStreak++; this.combo = 0;
+        this.playLog.push({ key: gameKey, won: false, level: this.level });
         playerData.trackGame(gameKey, false);
         this.showHeartBreak();
         this.updateHUD();
@@ -7519,9 +8607,9 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(1900, () => {
             t1.destroy(); t2.destroy();
             if (firstClear || !playerData.hasSeenStory(key + '_outro')) {
-                this.scene.start('StoryScene', { character: key, type: 'outro', score: this.score });
+                this.scene.start('StoryScene', { character: key, type: 'outro', score: this.score, log: this.playLog });
             } else {
-                this.scene.start('StageClearScene', { character: key, score: this.score });
+                this.scene.start('StageClearScene', { character: key, score: this.score, log: this.playLog });
             }
         });
     }
@@ -7543,6 +8631,12 @@ class GameScene extends Phaser.Scene {
     exitToMenu() { musicEngine.stopMusic(); this.scene.stop(); this.scene.start('StartScreen'); }
 }
 
+
+// Farben der Zwischenbilder - kraeftig und wechselnd
+GameScene.FLAT_COLORS = [
+    0xe8453c, 0x1fa2d6, 0xf7b32b, 0x39b54a, 0x9b5de5,
+    0xef476f, 0x06d6a0, 0xff8c42, 0x4361ee, 0xf15bb5
+];
 
 // ======================================================================
 // GAME OVER
@@ -7877,7 +8971,7 @@ const config = {
     fps: { target: 60, forceSetTimeOut: true },
     render: { antialias: true, roundPixels: false, powerPreference: 'high-performance' },
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
-    scene: [BootScene, StartScreen, CityScene, StoryScene, StageClearScene, ModeSelectScene, GameScene, GameOverScene, AlbumScene, ShopScene, AchievementsScene, PauseScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, DudeRun, DudeDodge, DudeJump, KaeppchenCollect, KaeppchenMaze, KaeppchenDodge, KaeppchenDeliver, EdgarRoll, EdgarBounce, EdgarGoal, EdgarDodge, ZobelSneeze, SwaggyJump, DudeSlide, KaeppchenPick, EdgarPinball, ReactionTest, WhackAMole, CountThem, RhythmTap, AvoidLaser, KeyDuel, ZobelClimb, ZobelDig, SwaggyFlappy, SwaggyHook, DudeSort, DudePush, KaeppchenRedLight, KaeppchenBake, EdgarGolf, EdgarBrick, PickTheNose, SwatTheFly, BlowCandles, StompIt, BossGame, BoxingBoss, SwaggyBoss, KaeppchenBoss, EdgarBoss]
+    scene: [BootScene, StartScreen, CityScene, StoryScene, StageClearScene, ModeSelectScene, GameScene, GameOverScene, AlbumScene, ShopScene, AchievementsScene, PauseScene, ClickTheButton, DodgeTheBall, MashTheKey, StopTheBar, CatchTheGem, DragToTarget, TypeTheWord, ConnectTheLovers, PumpTheBalloon, Safecracker, MatchTheShape, HitTheTarget, TargetClick, MathQuiz, MemoryClick, ColorMatch, DontPress, StopWatch, SpotTheOdd, BalanceStick, FastClicker, ZobelFrogger, ZobelJump, ZobelCatch, FeedZobel, ZobelDance, ZobelHide, ZobelRun, SwaggySwim, SwaggyBubble, SwaggyDance, SwaggyFish, DudeRun, DudeDodge, DudeJump, KaeppchenCollect, KaeppchenMaze, KaeppchenDodge, KaeppchenDeliver, EdgarRoll, EdgarBounce, EdgarGoal, EdgarDodge, ZobelSneeze, SwaggyJump, DudeSlide, KaeppchenPick, EdgarPinball, ReactionTest, WhackAMole, CountThem, RhythmTap, AvoidLaser, KeyDuel, ZobelClimb, ZobelDig, SwaggyFlappy, SwaggyHook, DudeSort, DudePush, KaeppchenRedLight, KaeppchenBake, EdgarGolf, EdgarBrick, PickTheNose, SwatTheFly, BlowCandles, StompIt, BossGame, BoxingBoss, SwaggyBoss, KaeppchenBoss, EdgarBoss, BalloonPop, TrafficLight, SockMatch, WaterFlower, PizzaTopping, GoalkeeperDive, StarConnect, CakeCatch, BrushTeeth, PetTheAnimal]
 };
 const game = new Phaser.Game(config);
 </script>
