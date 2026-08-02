@@ -4,3 +4,4 @@ _test_phaser.min.js
 .DS_Store
 _neo_test.html
 _classic_test.html
+engine/phaser.min.js

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZobelEngine - Demo &amp; Vergleich</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; background:#05060f; font-family:'Orbitron',sans-serif; color:#cfd6ea; overflow:hidden; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
+  #shell { width:min(94vw, calc(84vh * 4/3)); aspect-ratio:4/3; display:flex; align-items:center; justify-content:center; }
+  canvas { border:3px solid rgba(0,255,136,.7); border-radius:10px; box-shadow:0 0 28px rgba(0,255,136,.3); display:block; }
+  #bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:11px; }
+  button { font-family:inherit; font-size:11px; font-weight:700; padding:7px 12px; border-radius:7px;
+           border:1px solid rgba(0,255,136,.55); background:rgba(0,255,136,.10); color:#7dffc4; cursor:pointer; }
+  button:hover { background:rgba(0,255,136,.22); }
+  button.on { background:#00ff88; color:#06210f; }
+  #stats { font-size:11px; color:#8b93b8; letter-spacing:.06em; }
+  #stats b { color:#00ff88; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="shell"></div>
+<div id="bar">
+  <button id="bScene">Szene: Minispiel</button>
+  <button id="bBloom" class="on">Leuchten</button>
+  <button id="bCrt" class="on">Röhren-Optik</button>
+  <button id="bStress">Belastungstest</button>
+  <span id="stats">…</span>
+</div>
+
+<script src="zobelengine.js"></script>
+<script>
+const W = 800, H = 600;
+const M = ZE.Math;
+
+/* ---------------------------------------------------------------
+   Effekt-Texturen: werden beim Start selbst gezeichnet.
+   --------------------------------------------------------------- */
+function buildArt(game) {
+  const T = game.textures;
+  T.make('spark', 32, 32, (c,w) => {
+    const g = c.createRadialGradient(w/2,w/2,0,w/2,w/2,w/2);
+    g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.45,'rgba(255,255,255,.7)'); g.addColorStop(1,'rgba(255,255,255,0)');
+    c.fillStyle=g; c.fillRect(0,0,w,w);
+  });
+  T.make('chip', 16, 16, (c,w) => { c.fillStyle='#fff'; c.fillRect(2,2,w-4,w-4); });
+  T.make('shadow', 128, 48, (c,w,h) => {
+    const g = c.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2);
+    g.addColorStop(0,'rgba(0,0,0,.6)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    c.save(); c.translate(w/2,h/2); c.scale(1,h/w); c.translate(-w/2,-w/2);
+    c.fillStyle=g; c.fillRect(0,0,w,w); c.restore();
+  });
+  T.make('grad-night', 8, 600, (c) => {
+    const g = c.createLinearGradient(0,0,0,600);
+    g.addColorStop(0,'#1b1040'); g.addColorStop(1,'#05060f');
+    c.fillStyle=g; c.fillRect(0,0,8,600);
+  });
+  T.make('grad-sea', 8, 600, (c) => {
+    const g = c.createLinearGradient(0,0,0,600);
+    g.addColorStop(0,'#0a6e94'); g.addColorStop(1,'#021d2e');
+    c.fillStyle=g; c.fillRect(0,0,8,600);
+  });
+}
+
+/* ---------------------------------------------------------------
+   Gemeinsame Bausteine: Neongitter, Zündschnur, Befehlswort
+   --------------------------------------------------------------- */
+function neonGrid(scene, accent) {
+  scene.add.image(W/2, H/2, 'grad-night').setDisplaySize(W, H).setDepth(-1000);
+  const horizon = 330;
+  for (let i = -10; i <= 10; i++) {
+    const x2 = W/2 + i * 150;
+    const len = Math.hypot(x2 - W/2, H - horizon);
+    const ang = Math.atan2(H - horizon, x2 - W/2);
+    scene.add.rect(W/2, horizon, len, 1.5, accent, .18)
+         .setOrigin(0, .5).setRotation(ang).setDepth(-950);
+  }
+  const lines = [];
+  for (let i = 0; i < 12; i++) lines.push(scene.add.rect(W/2, horizon, W, 2, accent, .2).setDepth(-949));
+  scene.add.image(W/2, horizon - 8, '__glow').setTint(accent).setBlend('add')
+       .setDisplaySize(560, 190).setAlpha(.22).setDepth(-960);
+  let off = 0;
+  return (dt) => {
+    off = (off + dt * 46) % 46;
+    for (let i = 0; i < lines.length; i++) {
+      const p = ((i * 46 + off) / (12 * 46));
+      lines[i].y = horizon + Math.pow(p, 2.1) * (H - horizon);
+      lines[i].alpha = .05 + p * .28;
+    }
+  };
+}
+
+function makeFuse(scene) {
+  scene.add.rect(W/2, 575, 620, 22, 0x000000, .55).setDepth(2000);
+  const fuse = scene.add.rect(700, 575, 600, 9, 0x00ff88).setOrigin(1, .5).setDepth(2001);
+  const bomb = scene.add.circle(742, 572, 21, 0x0e0e16).setDepth(2002);
+  scene.add.rect(752, 552, 9, 11, 0x000000).setDepth(2002);
+  const spark = scene.add.image(100, 575, 'spark').setBlend('add').setTint(0xffe08a).setDisplaySize(26, 26).setDepth(2003);
+  const glow = scene.add.image(100, 575, '__glow').setBlend('add').setTint(0xffaa33).setDisplaySize(60, 60).setAlpha(.6).setDepth(2002);
+  const burn = scene.add.particles(100, 575, 'spark', {
+    speed: [20, 90], angle: [200, 340], life: [200, 420], scale: [.28, 0],
+    tint: [0xffd93d, 0xff8833], gravity: 120
+  }).setDepth(2002);
+  return { fuse, bomb, spark, glow, burn,
+    set(p) {
+      fuse.width = 600 * (1 - p);
+      fuse.tint = M.mix(0x00ff88, 0xff3355, p);
+      spark.x = glow.x = burn.x = 100 + 600 * p;
+      if (Math.random() < .5) burn.explode(1);
+      const near = p > .72;
+      bomb.setScale(near ? 1 + Math.sin(performance.now() / 60) * .12 : 1);
+    }
+  };
+}
+
+function commandWord(scene, word, keys) {
+  const c = [];
+  const flare = scene.add.image(W/2, 252, '__glow').setBlend('add').setDisplaySize(760, 260).setAlpha(.30).setDepth(3600);
+  const t = scene.add.text(W/2, 252, word, {
+    font: 'bold 76px Orbitron, sans-serif', fill:'#ffffff', stroke:'#000000', strokeWidth:6, glow:18, glowColor:'#000'
+  }).setDepth(3601);
+  c.push(flare, t);
+  if (keys) c.push(scene.add.text(W/2, 320, keys, { font:'bold 24px Orbitron, sans-serif', fill:'#ffd93d' }).setDepth(3601));
+  c.forEach(o => { o.scaleX = o.scaleY = 2.6; o.alpha = 0; });
+  scene.tweens.add({ targets: c, scaleX: 1, scaleY: 1, alpha: 1, duration: 140, ease: 'BackOut',
+    onComplete: () => {
+      scene.tweens.add({ targets: flare, alpha: 0, duration: 300 });
+      scene.time.delayedCall(520, () => {
+        scene.tweens.add({ targets: c, alpha: 0, scaleX: 1.3, scaleY: 1.3, y: 208, duration: 220,
+          onComplete: () => c.forEach(o => o.destroy()) });
+      });
+    }
+  });
+}
+
+/* ---------------------------------------------------------------
+   Szene 1: ein echtes Minispiel (Sterne fangen)
+   --------------------------------------------------------------- */
+class CatchScene extends ZE.Scene {
+  constructor() { super('catch'); }
+  create() {
+    this.r = this.game.renderer;
+    this.gridTick = neonGrid(this, 0x00ff88);
+    this.add.image(W/2, H/2, 'grad-sea').setDisplaySize(W, H).setAlpha(.55).setDepth(-880);
+
+    this.title = this.add.text(W/2, 32, 'FANG DIE STERNE!', { font:'bold 30px Orbitron, sans-serif', fill:'#ffffff', stroke:'#000', strokeWidth:4 }).setDepth(1900);
+    this.counter = this.add.text(W/2, 96, '0 / 5', { font:'bold 26px Orbitron, sans-serif', fill:'#ffd93d', glow:10 }).setDepth(1900);
+
+    this.add.image(W/2, 512, 'shadow').setDisplaySize(150, 40).setAlpha(.5).setDepth(9);
+    this.hero = this.add.image(400, 470, 'zobel').setScale(0.19).setDepth(10);
+
+    this.items = [];
+    this.caught = 0;
+    this.spawn = this.time.addEvent({ delay: 520, loop: true, callback: () => this.spawnItem() });
+
+    this.burst = this.add.particles(0, 0, 'spark', { speed:[80,320], life:[280,600], scale:[.9,0], tint:[0xffd93d,0xffffff] }).setDepth(3000);
+    this.fuseUI = makeFuse(this);
+    this.timer = this.time.delayedCall(9000, () => this.reset());
+    commandWord(this, 'FANGEN!', '🖱️ MAUS');
+  }
+  spawnItem() {
+    const star = M.between(0, 1) > .25;
+    const n = this.add.text(M.between(70, 730), -30, star ? '⭐' : '💣', { font:'38px sans-serif' }).setDepth(20);
+    n.vy = M.between(150, 300); n.star = star;
+    this.items.push(n);
+  }
+  reset() {
+    this.caught = 0; this.counter.setText('0 / 5');
+    this.items.forEach(i => i.destroy()); this.items.length = 0;
+    this.timer = this.time.delayedCall(9000, () => this.reset());
+  }
+  update(now, dtms) {
+    const dt = dtms / 1000;
+    this.gridTick(dt);
+    this.fuseUI.set(this.time.progress(this.timer));
+    this.hero.x = M.clamp(this.input.pointer.x, 60, 740);
+    this.hero.rotation = Math.sin(now / 220) * .09;
+
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      it.y += it.vy * dt;
+      it.rotation += dt * 1.6;
+      if (it.y > 640) { it.destroy(); this.items.splice(i, 1); continue; }
+      if (M.dist(it.x, it.y, this.hero.x, this.hero.y - 20) < 46) {
+        this.burst.explode(16, it.x, it.y);
+        this.r.fx.flashCol = it.star ? [0, 1, .53] : [1, .2, .33];
+        this.r.fx.flashAmt = .5;
+        this.tweens.add({ targets: this.r.fx, flashAmt: 0, duration: 260 });
+        it.destroy(); this.items.splice(i, 1);
+        if (it.star) {
+          this.caught++; this.counter.setText(this.caught + ' / 5');
+          this.tweens.add({ targets: this.counter, scaleX: 1.4, scaleY: 1.4, duration: 110, yoyo: true });
+          if (this.caught >= 5) { commandWord(this, 'GESCHAFFT!'); this.time.delayedCall(700, () => this.reset()); }
+        } else {
+          // reset() leert this.items - deshalb die Schleife danach verlassen
+          this.reset();
+          return;
+        }
+      }
+    }
+  }
+}
+
+/* ---------------------------------------------------------------
+   Szene 2: Belastungstest - wie viele Sprites schafft die Engine?
+   --------------------------------------------------------------- */
+class StressScene extends ZE.Scene {
+  constructor() { super('stress'); }
+  create(data) {
+    this.count = (data && data.count) || 4000;
+    this.add.image(W/2, H/2, 'grad-night').setDisplaySize(W, H).setDepth(-1000);
+    this.sprites = [];
+    const keys = ['spark', 'chip', '__disc', 'edgar'];
+    for (let i = 0; i < this.count; i++) {
+      const s = this.add.image(M.between(0, W), M.between(0, H), keys[i % keys.length])
+        .setDisplaySize(18, 18).setTint(M.pick([0x00ff88, 0x00d4ff, 0xffd93d, 0xff5c7a, 0xb06bff]))
+        .setBlend(i % 3 === 0 ? 'add' : 'normal').setAlpha(.85);
+      s.vx = M.between(-90, 90); s.vy = M.between(-90, 90); s.vr = M.between(-3, 3);
+      this.sprites.push(s);
+    }
+    this.label = this.add.text(W/2, 40, this.count + ' Sprites', { font:'bold 24px Orbitron, sans-serif', fill:'#00ff88', glow:12 }).setDepth(100);
+  }
+  update(now, dtms) {
+    const dt = dtms / 1000;
+    for (const s of this.sprites) {
+      s.x += s.vx * dt; s.y += s.vy * dt; s.rotation += s.vr * dt;
+      if (s.x < 0 || s.x > W) s.vx *= -1;
+      if (s.y < 0 || s.y > H) s.vy *= -1;
+    }
+  }
+}
+
+/* --------------------------------------------------------------- Start */
+window.game = new ZE.Game({
+  width: W, height: H, parent: 'shell',
+  scenes: [CatchScene, StressScene],
+  boot: (g) => {
+    buildArt(g);
+    return Promise.all([
+      g.textures.load('zobel', '../Zobel.png'),
+      g.textures.load('edgar', '../edgar.png'),
+      g.textures.load('swaggy', '../swaggy.png')
+    ]);
+  },
+  first: 'catch'
+});
+
+// --------------------------------------------------------------- Bedienung
+const $ = id => document.getElementById(id);
+let sceneMode = 'catch';
+$('bScene').onclick = () => {
+  sceneMode = sceneMode === 'catch' ? 'stress' : 'catch';
+  $('bScene').textContent = 'Szene: ' + (sceneMode === 'catch' ? 'Minispiel' : 'Belastung');
+  game.start(sceneMode, { count: 4000 });
+};
+$('bStress').onclick = () => { sceneMode = 'stress'; $('bScene').textContent = 'Szene: Belastung'; game.start('stress', { count: 4000 }); };
+$('bBloom').onclick = (e) => {
+  const on = game.renderer.fx.bloom > 0.01;
+  game.renderer.fx.bloom = on ? 0 : 0.85;
+  e.target.classList.toggle('on', !on);
+};
+$('bCrt').onclick = (e) => {
+  const on = game.renderer.fx.curve > 0.001;
+  game.renderer.fx.curve = on ? 0 : 0.06;
+  game.renderer.fx.scanline = on ? 0 : 0.06;
+  game.renderer.fx.aberration = on ? 0 : 0.0016;
+  e.target.classList.toggle('on', !on);
+};
+
+setInterval(() => {
+  const objs = game.activeScenes.reduce((n, s) => n + s.children.length, 0);
+  $('stats').innerHTML = '<b>' + game.fps.toFixed(0) + '</b> fps &nbsp;•&nbsp; ' +
+    objs + ' Objekte &nbsp;•&nbsp; <b>' + game.drawCalls + '</b> Zeichenaufrufe &nbsp;•&nbsp; Engine <b>' +
+    (document.querySelector('script[src="zobelengine.js"]') ? 'ZobelEngine' : '?') + '</b>';
+}, 400);
+</script>
+</body>
+</html>

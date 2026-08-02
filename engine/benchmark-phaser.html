@@ -1,0 +1,35 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phaser Belastungstest</title>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<style>body{margin:0;background:#05060f}canvas{display:block}</style></head><body>
+<script>
+const W=800,H=600;
+class Stress extends Phaser.Scene {
+  constructor(){super('s');}
+  create(){
+    this.count = 4000;
+    // Gleiche Grundtexturen wie bei ZobelEngine erzeugen
+    const mk=(k,w,h,d)=>{const c=this.textures.createCanvas(k,w,h);d(c.getContext(),w,h);c.refresh();};
+    mk('spark',32,32,(c,w)=>{const g=c.createRadialGradient(w/2,w/2,0,w/2,w/2,w/2);
+      g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=g;c.fillRect(0,0,w,w);});
+    mk('chip',16,16,(c,w)=>{c.fillStyle='#fff';c.fillRect(2,2,w-4,w-4);});
+    mk('disc',128,128,(c,w)=>{c.fillStyle='#fff';c.beginPath();c.arc(w/2,w/2,w/2-2,0,6.2832);c.fill();});
+    this.sprites=[];
+    const keys=['spark','chip','disc','spark'];
+    const cols=[0x00ff88,0x00d4ff,0xffd93d,0xff5c7a,0xb06bff];
+    for(let i=0;i<this.count;i++){
+      const s=this.add.image(Phaser.Math.Between(0,W),Phaser.Math.Between(0,H),keys[i%4])
+        .setDisplaySize(18,18).setTint(cols[i%5]).setAlpha(.85);
+      if(i%3===0) s.setBlendMode(Phaser.BlendModes.ADD);
+      s.vx=Phaser.Math.Between(-90,90); s.vy=Phaser.Math.Between(-90,90); s.vr=Phaser.Math.FloatBetween(-3,3);
+      this.sprites.push(s);
+    }
+    this.cameras.main.postFX.addBloom(0xffffff,1,1,0.85,1.0);
+    this.cameras.main.postFX.addVignette(0.5,0.5,0.9,0.4);
+  }
+  update(t,d){const dt=d/1000;
+    for(const s of this.sprites){s.x+=s.vx*dt;s.y+=s.vy*dt;s.rotation+=s.vr*dt;
+      if(s.x<0||s.x>W)s.vx*=-1; if(s.y<0||s.y>H)s.vy*=-1;}}
+}
+const game=new Phaser.Game({type:Phaser.WEBGL,width:W,height:H,backgroundColor:'#05060f',scene:[Stress]});
+window.game=game;
+</script></body></html>
